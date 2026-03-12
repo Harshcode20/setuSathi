@@ -1,9 +1,0 @@
-const { getDefaultConfig } = require('expo/metro-config');
-
-const config = getDefaultConfig(__dirname);
-
-// Disable Expo Router since we use React Navigation
-config.resolver = config.resolver || {};
-config.resolver.unstable_enablePackageExports = false;
-
-module.exports = config;
