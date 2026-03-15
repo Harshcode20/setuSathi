@@ -1,12 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import BottomNav from '../components/BottomNav';
 import { usePatientStore } from '../lib/PatientStore';
 import { usePreferences } from '../lib/PreferencesContext';
 
-const colors = [
+const avatarColors = [
   { bg: 'rgba(37,99,235,0.15)', text: '#2563EB' },
   { bg: 'rgba(13,148,136,0.15)', text: '#0D9488' },
   { bg: 'rgba(249,115,22,0.15)', text: '#F97316' },
@@ -15,17 +14,35 @@ const colors = [
 ];
 
 const PatientRecord = () => {
-  const navigation = useNavigation();
-  const { patients: allPatients } = usePatientStore();
+  const { patients: allPatients, searchPatients } = usePatientStore();
   const { t, colors } = usePreferences();
   const [search, setSearch] = useState('');
+  const [searchResults, setSearchResults] = useState<typeof allPatients>([]);
 
-  const filtered = search.trim().length > 0
-    ? allPatients.filter((p) =>
-        p.name.toLowerCase().includes(search.trim().toLowerCase()) ||
-        p.id.toLowerCase().includes(search.trim().toLowerCase())
-      )
-    : allPatients;
+  useEffect(() => {
+    if (search.trim().length === 0) {
+      setSearchResults([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      const apiResults = await searchPatients(search.trim());
+      if (apiResults.length > 0) {
+        setSearchResults(apiResults);
+      } else {
+        setSearchResults(
+          allPatients.filter((p) =>
+            p.name.toLowerCase().includes(search.trim().toLowerCase())
+            || p.id.toLowerCase().includes(search.trim().toLowerCase())
+          )
+        );
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [search, allPatients, searchPatients]);
+
+  const filtered = search.trim().length > 0 ? searchResults : allPatients;
 
   const getInitials = (name: string) => {
     const parts = name.split(' ');
@@ -71,7 +88,7 @@ const PatientRecord = () => {
       <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 80 }}>
         <View style={[styles.listCard, { backgroundColor: colors.surface }]}> 
           {filtered.map((patient, i) => {
-            const color = colors[i % colors.length];
+            const color = avatarColors[i % avatarColors.length];
             return (
               <TouchableOpacity key={patient.id} style={styles.listItem} activeOpacity={0.7}>
                 <View style={[styles.avatar, { backgroundColor: color.bg }]}>

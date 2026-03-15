@@ -23,6 +23,8 @@ interface PatientStoreValue {
   addPatient: (p: Omit<Patient, 'id' | 'patientId' | 'registeredAt'>) => Promise<Patient>;
   refreshPatients: () => Promise<void>;
   searchPatients: (term: string) => Promise<Patient[]>;
+  getPatientById: (patientId: number) => Promise<Patient | null>;
+  updatePatient: (patientId: number, updates: Partial<Omit<Patient, 'id' | 'patientId' | 'registeredAt'>>) => Promise<Patient>;
   deletePatient: (patientId: number) => Promise<void>;
 }
 
@@ -39,6 +41,19 @@ const mapApiToPatient = (p: PatientApiData): Patient => ({
   lastVisit: p.updated_at ? new Date(p.updated_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '',
   registeredAt: p.created_at ? p.created_at.split('T')[0] : '',
 });
+
+const normalizeDateForApi = (value?: string) => {
+  if (!value) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+
+  const ddmmyyyyMatch = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value);
+  if (ddmmyyyyMatch) {
+    const [, day, month, year] = ddmmyyyyMatch;
+    return `${year}-${month}-${day}`;
+  }
+
+  return value;
+};
 
 const defaultPatients: Patient[] = [
   { id: 'P1001', patientId: 1001, name: 'Kaminiben Sarvaiya', gender: 'Female', age: 58, village: 'Ramagri', lastVisit: '08 Mar 2026', registeredAt: '2026-03-08' },
@@ -61,6 +76,8 @@ const PatientContext = createContext<PatientStoreValue>({
   addPatient: async () => defaultPatients[0],
   refreshPatients: async () => {},
   searchPatients: async () => [],
+  getPatientById: async () => null,
+  updatePatient: async () => defaultPatients[0],
   deletePatient: async () => {},
 });
 
@@ -97,7 +114,7 @@ export const PatientProvider = ({ children }: { children: React.ReactNode }) => 
         full_name: data.name,
         gender: data.gender,
         age: data.age,
-        date_of_birth: data.dob,
+        date_of_birth: normalizeDateForApi(data.dob),
         mobile_number: data.mobile,
         address: data.address,
         photo_url: data.photoUri,
@@ -120,7 +137,7 @@ export const PatientProvider = ({ children }: { children: React.ReactNode }) => 
     return newPatient;
   };
 
-  const searchPatients = async (term: string): Promise<Patient[]> => {
+  const searchPatients = useCallback(async (term: string): Promise<Patient[]> => {
     if (!useRealApi || !term.trim()) return [];
     try {
       const data = await patientService.search(term.trim());
@@ -128,7 +145,59 @@ export const PatientProvider = ({ children }: { children: React.ReactNode }) => 
     } catch {
       return [];
     }
-  };
+  }, []);
+
+  const getPatientById = useCallback(async (patientId: number): Promise<Patient | null> => {
+    if (!useRealApi) {
+      return patients.find((p) => p.patientId === patientId) || null;
+    }
+
+    try {
+      const data = await patientService.getById(patientId);
+      return mapApiToPatient(data);
+    } catch {
+      return null;
+    }
+  }, [patients]);
+
+  const updatePatient = useCallback(async (
+    patientId: number,
+    updates: Partial<Omit<Patient, 'id' | 'patientId' | 'registeredAt'>>,
+  ): Promise<Patient> => {
+    if (useRealApi) {
+      const payload: {
+        full_name?: string;
+        gender?: string;
+        date_of_birth?: string;
+        age?: number;
+        mobile_number?: string;
+        address?: string;
+        photo_url?: string;
+        updated_by: number;
+      } = {
+        updated_by: 1,
+      };
+
+      if (typeof updates.name === 'string') payload.full_name = updates.name;
+      if (typeof updates.gender === 'string') payload.gender = updates.gender;
+      if (typeof updates.dob === 'string') payload.date_of_birth = normalizeDateForApi(updates.dob);
+      if (typeof updates.age === 'number') payload.age = updates.age;
+      if (typeof updates.mobile === 'string') payload.mobile_number = updates.mobile;
+      if (typeof updates.address === 'string') payload.address = updates.address;
+      if (typeof updates.photoUri === 'string') payload.photo_url = updates.photoUri;
+
+      const updated = mapApiToPatient(await patientService.update(patientId, payload));
+      setPatients((prev) => prev.map((p) => (p.patientId === patientId ? updated : p)));
+      return updated;
+    }
+
+    const existing = patients.find((p) => p.patientId === patientId);
+    if (!existing) throw new Error('Patient not found');
+
+    const updated = { ...existing, ...updates };
+    setPatients((prev) => prev.map((p) => (p.patientId === patientId ? updated : p)));
+    return updated;
+  }, [patients]);
 
   const deletePatient = async (patientId: number): Promise<void> => {
     if (useRealApi) {
@@ -138,7 +207,7 @@ export const PatientProvider = ({ children }: { children: React.ReactNode }) => 
   };
 
   return (
-    <PatientContext.Provider value={{ patients, loading, addPatient, refreshPatients, searchPatients, deletePatient }}>
+    <PatientContext.Provider value={{ patients, loading, addPatient, refreshPatients, searchPatients, getPatientById, updatePatient, deletePatient }}>
       {children}
     </PatientContext.Provider>
   );

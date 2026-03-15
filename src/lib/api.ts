@@ -39,9 +39,18 @@ const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || `API error: ${res.status}`);
+    throw new Error(body.detail || body.message || `API error: ${res.status}`);
   }
-  return res.json();
+
+  if (res.status === 204) return null;
+
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.toLowerCase().includes('application/json')) {
+    return res.json();
+  }
+
+  const text = await res.text();
+  return text as unknown;
 };
 
 export const authService = {
