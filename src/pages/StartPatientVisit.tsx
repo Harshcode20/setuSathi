@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -56,10 +56,21 @@ const StartPatientVisit = () => {
   const route = useRoute();
   const { t, colors } = usePreferences();
   const { patient, opdPin, nextToken } = (route.params as any) || {};
-  const patientData = patient || { id: 'P1234', name: 'Kaminiben sarvaiya', gender: 'Female', age: 58 };
+  const patientData = patient as { id: string; name: string; gender: string; age: number } | undefined;
+
+  useEffect(() => {
+    if (!patientData) {
+      Alert.alert(t('Patient not found'), t('Please select a patient from registration desk.'));
+      navigation.goBack();
+    }
+  }, [patientData, navigation, t]);
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [notes, setNotes] = useState('');
+
+  if (!patientData) {
+    return <View style={[styles.root, { backgroundColor: colors.surface }]} />;
+  }
 
   const toggleSymptom = (id: string) => {
     setSelected((prev) => {
@@ -76,25 +87,62 @@ const StartPatientVisit = () => {
   };
 
   const handleGenerateToken = async () => {
-    const token = nextToken || Math.floor(1 + Math.random() * 99);
+    if (!opdPin) {
+      Alert.alert(t('Unable to Create Case'), t('No active OPD PIN found. Please start or join an OPD session first.'));
+      return;
+    }
 
-    // Push patient into the Firestore OPD session so doctor can see them
-    if (opdPin) {
+    const fallbackToken = Math.floor(1 + Math.random() * 99);
+    const baseToken = Number(nextToken) > 0 ? Number(nextToken) : fallbackToken;
+    let token = baseToken;
+    const selectedComplaints = symptomCategories
+      .flatMap((category) => category.items)
+      .filter((item) => selected.has(item.id))
+      .map((item) => item.label);
+    const registrationNotes = notes.trim();
+
+    const enqueueWithToken = async (requestedToken: number) => {
+      await opdService.addPatientToSession(opdPin, {
+        id: patientData.id,
+        name: patientData.name,
+        gender: patientData.gender,
+        age: patientData.age,
+        token: requestedToken,
+        complaints: selectedComplaints,
+        registrationNotes,
+      });
+      return requestedToken;
+    };
+
+    try {
+      token = await enqueueWithToken(token);
+    } catch (err: any) {
+      const msg = String(err?.message || '').toLowerCase();
+      const tokenConflict = msg.includes('token already exists') || msg.includes('409');
+
+      if (!tokenConflict) {
+        Alert.alert(t('Unable to Create Case'), err?.message || t('Could not add patient to OPD queue.'));
+        return;
+      }
+
       try {
-        await opdService.addPatientToSession(opdPin, {
-          id: patientData.id,
-          name: patientData.name,
-          gender: patientData.gender,
-          age: patientData.age,
-          token,
-        });
-      } catch (err) {
-        console.warn('Failed to add patient to OPD session:', err);
+        const latestSession = await opdService.joinByPin(opdPin);
+        const nextAvailableToken = latestSession
+          ? latestSession.patients.reduce((maxToken, queuedPatient) => {
+              const queuedToken = Number(queuedPatient.token) || 0;
+              return queuedToken > maxToken ? queuedToken : maxToken;
+            }, 0) + 1
+          : token + 1;
+
+        token = await enqueueWithToken(nextAvailableToken);
+      } catch (retryErr: any) {
+        Alert.alert(t('Unable to Create Case'), retryErr?.message || t('Could not add patient to OPD queue.'));
+        return;
       }
     }
 
     Alert.alert(`${t('Token')} #${token} ${t('Generated')}`, `${t('Patient')} ${patientData.name} ${t('has been registered with')} ${selected.size} ${t('symptom(s).')}`);
-    navigation.navigate('RegistrationDesk' as never);
+    navigation.goBack();
   };
 
   return (

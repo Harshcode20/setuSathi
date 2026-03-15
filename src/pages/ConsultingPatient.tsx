@@ -1,12 +1,15 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView,
   Modal,
   TextInput,
+  Alert,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { usePreferences } from '../lib/PreferencesContext';
+import { clinicalService, opdService } from '../lib/api';
+import { useAuth } from '../lib/AuthContext';
 
 // ─── Data ────────────────────────────────────────────
 
@@ -106,37 +109,21 @@ type VisitHistoryEntry = {
   medicines?: HistoryMedicine[];
 };
 
-const defaultVisitHistory: VisitHistoryEntry[] = [
-  {
-    id: 'vh-1',
-    date: '10-6-2025',
-    labTests: ['6.1 CBC'],
-    medicines: [
-      { id: '6.2', name: 'T. Citra', dosage: '1-0-1', days: '3', timing: 'After Meal' },
-      { id: '6.7', name: 'T. Cip Z', dosage: '1-0-1', days: '3', timing: 'Before Meal' },
-      { id: '6.9', name: 'T. Losartan', dosage: '1-0-1', days: '3', timing: 'After Meal' },
-      { id: '6.13', name: 'Calcium Tab', dosage: '1-0-1', days: '3', timing: 'After Meal' },
-    ],
-  },
-  {
-    id: 'vh-2',
-    date: '10-6-2025',
-    consultedBy: 'Dr. Ramesh Jani',
-    complaints: ['1.1 Body Pain', '2.1 Fever', '3.1 Cough', '4.1 Weakness'],
-    vitals: { temp: '98.2 F', bp: '140/120', pulse: '86 bpm', bs: '120', spo2: '99' },
-    allergies: 'Smoke Allergie',
-    registrationNotes: 'Patient felt dizziy earlier today',
-    vitalsNotes: 'Patient felt dizziy earlier today',
-    diagnosis: ['5.1 Arthritis', '5.3 Boils', '5.4 Diarrhea'],
-    labTests: ['6.1 CBC'],
-    medicines: [
-      { id: '6.2', name: 'T. Citra', dosage: '1-0-1', days: '3', timing: 'After Meal' },
-      { id: '6.7', name: 'T. Cip Z', dosage: '1-0-1', days: '3', timing: 'Before Meal' },
-      { id: '6.9', name: 'T. Losartan', dosage: '1-0-1', days: '3', timing: 'After Meal' },
-      { id: '6.13', name: 'Calcium Tab', dosage: '1-0-1', days: '3', timing: 'After Meal' },
-    ],
-  },
-];
+type HistoryApiEntry = {
+  id?: string;
+  date: string;
+  consulted_by?: string;
+  complaints?: string[];
+  vitals?: HistoryVitals;
+  allergies?: string;
+  registration_notes?: string;
+  vitals_notes?: string;
+  diagnosis?: string[];
+  lab_tests?: string[];
+  medicines?: HistoryMedicine[];
+};
+
+const defaultVisitHistory: VisitHistoryEntry[] = [];
 
 // ─── Component ───────────────────────────────────────
 
@@ -144,15 +131,28 @@ const ConsultingPatient = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { t, colors } = usePreferences();
-  const { patient } = (route.params as any) || {};
+  const { user, userProfile } = useAuth();
+  const { patient, sessionPin } = (route.params as any) || {};
 
-  const patientData = patient || {
-    id: 'P1234', name: 'Dharamshinhbhai Prajapati', gender: 'Male', age: 58, token: 1,
-    complaints: [], vitals: {}, allergies: '', registrationNotes: '', vitalsNotes: '',
-  };
+  const patientData = patient as any;
+
+  if (!patientData) {
+    return (
+      <View style={[styles.root, { backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 }]}>
+        <Text style={{ fontSize: 16, fontWeight: '600', color: colors.text, marginBottom: 12 }}>{t('Patient not found')}</Text>
+        <TouchableOpacity style={styles.primaryBtnFlex} onPress={() => navigation.goBack()} activeOpacity={0.85}>
+          <Text style={styles.primaryBtnText}>{t('Go Back')}</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   // Step management: 1 = Diagnosis, 2 = Prescribe Medicines, 3 = Follow-up Recommendation
   const [step, setStep] = useState(1);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState('');
+  const [apiHistory, setApiHistory] = useState<VisitHistoryEntry[]>([]);
+  const [submitting, setSubmitting] = useState(false);
 
   // Step 1 state — Diagnosis
   const [selectedDiseases, setSelectedDiseases] = useState<Set<string>>(new Set());
@@ -173,9 +173,75 @@ const ConsultingPatient = () => {
   const [complaintsExpanded, setComplaintsExpanded] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(false);
 
-  const visitHistory = Array.isArray((patientData as any).history) && (patientData as any).history.length > 0
+  useEffect(() => {
+    const parsedPatientId = Number(String(patientData?.id || '').replace(/\D/g, ''));
+    if (!Number.isFinite(parsedPatientId) || parsedPatientId <= 0) {
+      setHistoryError(t('Unable to identify patient for loading history.'));
+      setApiHistory([]);
+      return;
+    }
+
+    let mounted = true;
+
+    const loadHistory = async (withLoader: boolean) => {
+      if (withLoader) {
+        setHistoryLoading(true);
+      }
+      try {
+        const raw = await clinicalService.getPatientHistory(String(parsedPatientId)) as HistoryApiEntry[];
+        if (!mounted) return;
+
+        const mapped = (Array.isArray(raw) ? raw : []).map((entry, index) => ({
+          id: entry.id || `vh-${index + 1}`,
+          date: entry.date,
+          consultedBy: entry.consulted_by,
+          complaints: Array.isArray(entry.complaints) ? entry.complaints : [],
+          vitals: entry.vitals || undefined,
+          allergies: entry.allergies,
+          registrationNotes: entry.registration_notes,
+          vitalsNotes: entry.vitals_notes,
+          diagnosis: Array.isArray(entry.diagnosis) ? entry.diagnosis : [],
+          labTests: Array.isArray(entry.lab_tests) ? entry.lab_tests : [],
+          medicines: Array.isArray(entry.medicines) ? entry.medicines : [],
+        })) as VisitHistoryEntry[];
+
+        setApiHistory(mapped);
+        setHistoryError('');
+      } catch (err: any) {
+        if (mounted) {
+          setHistoryError(err?.message || t('Could not load patient history.'));
+        }
+      } finally {
+        if (mounted && withLoader) {
+          setHistoryLoading(false);
+        }
+      }
+    };
+
+    loadHistory(true);
+    const timer = setInterval(() => {
+      loadHistory(false);
+    }, 3000);
+
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+    };
+  }, [patientData?.id, t]);
+
+  const routeHistory = Array.isArray((patientData as any).history) && (patientData as any).history.length > 0
     ? (patientData as any).history as VisitHistoryEntry[]
     : defaultVisitHistory;
+
+  const visitHistory = apiHistory.length > 0 ? apiHistory : routeHistory;
+  const latestHistoryEntry = visitHistory.length > 0 ? visitHistory[0] : null;
+  const currentComplaints = (Array.isArray(patientData.complaints) && patientData.complaints.length > 0)
+    ? patientData.complaints
+    : (latestHistoryEntry?.complaints || []);
+  const currentVitals = latestHistoryEntry?.vitals || patientData.vitals || null;
+  const currentAllergies = latestHistoryEntry?.allergies || patientData.allergies || '';
+  const currentRegistrationNotes = patientData.registrationNotes || latestHistoryEntry?.registrationNotes || '';
+  const currentVitalsNotes = patientData.vitalsNotes || latestHistoryEntry?.vitalsNotes || '';
 
   const medicineCategoryLabels: Record<MedicineCategory, string> = {
     All: t('All'),
@@ -246,9 +312,73 @@ const ConsultingPatient = () => {
     });
   };
 
-  const handleMarkAsDone = () => {
-    const tokenNum = patientData.token || 1;
-    (navigation as any).navigate('DoctorOPDSession', { completedToken: tokenNum });
+  const handleMarkAsDone = async () => {
+    const parsedPatientId = Number(String(patientData.id || '').replace(/\D/g, ''));
+    if (!Number.isFinite(parsedPatientId) || parsedPatientId <= 0) {
+      Alert.alert(t('Invalid Patient'), t('Unable to identify patient for consultation submission.'));
+      return;
+    }
+
+    const diagnosisList = Array.from(selectedDiseases)
+      .map((id) => {
+        const disease = diseases.find((item) => item.id === id);
+        return disease ? `${disease.id} ${disease.label}` : id;
+      });
+
+    const normalizedOtherDiagnosis = otherDiagnosis.trim();
+    if (normalizedOtherDiagnosis) {
+      diagnosisList.push(normalizedOtherDiagnosis);
+    }
+
+    const labTestList = requireLabTests
+      ? Array.from(selectedLabTests).map((id) => {
+          const labTest = labTests.find((item) => item.id === id);
+          return labTest ? `${labTest.id} ${labTest.label}` : id;
+        })
+      : [];
+
+    const normalizedOtherLabTest = otherLabTest.trim();
+    if (requireLabTests && normalizedOtherLabTest) {
+      labTestList.push(normalizedOtherLabTest);
+    }
+
+    const prescribedMedicines = Array.from(selectedMedicines.values()).map((medicine) => ({
+      id: medicine.id,
+      name: medicine.label,
+      dosage: medicine.dosage,
+      days: medicine.days,
+      timing: medicine.timing,
+    }));
+
+    setSubmitting(true);
+    try {
+      await clinicalService.recordConsult(String(parsedPatientId), {
+        diagnosis: diagnosisList,
+        lab_tests: labTestList,
+        follow_up: followUp === 'Not Required' ? null : followUp,
+        doctor_notes: null,
+        consulted_by: userProfile?.fullName || user?.displayName || null,
+      });
+
+      if (prescribedMedicines.length > 0) {
+        await clinicalService.dispenseMedicine(String(parsedPatientId), prescribedMedicines);
+      }
+
+      if (sessionPin && Number.isFinite(Number(patientData.token))) {
+        try {
+          await opdService.updatePatientQueueStatus(String(sessionPin), Number(patientData.token), 'consult_done');
+        } catch (statusErr) {
+          console.warn('Consult saved but queue status update failed:', statusErr);
+        }
+      }
+
+      const tokenNum = patientData.token || 1;
+      (navigation as any).navigate('DoctorOPDSession', { completedToken: tokenNum });
+    } catch (err: any) {
+      Alert.alert(t('Failed to Save'), err?.message || t('Could not save consultation details.'));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const renderHistoryChips = (items: string[] | undefined) => {
@@ -451,7 +581,7 @@ const ConsultingPatient = () => {
           <Text style={styles.patientAvatarText}>{getInitials(patientData.name)}</Text>
         </View>
         <View style={styles.patientInfoCol}>
-          <Text style={[styles.patientId, { color: colors.mutedText }]}>P{patientData.id}</Text>
+          <Text style={[styles.patientId, { color: colors.mutedText }]}>{patientData.id}</Text>
           <Text style={[styles.patientName, { color: colors.text }]}>{patientData.name}</Text>
           <Text style={[styles.patientMeta, { color: colors.mutedText }]}>{t(patientData.gender)}  •  {patientData.age} {t('Yrs')}</Text>
         </View>
@@ -462,7 +592,7 @@ const ConsultingPatient = () => {
   // ─── Patient Complaints ─────
 
   const renderComplaints = () => {
-    const complaints: string[] = patientData.complaints || [];
+    const complaints: string[] = currentComplaints;
     return (
       <TouchableOpacity style={[styles.complaintsCard, { backgroundColor: colors.surface }]} onPress={() => setComplaintsExpanded(!complaintsExpanded)} activeOpacity={0.8}>
         <View style={styles.complaintsHeader}>
@@ -492,7 +622,7 @@ const ConsultingPatient = () => {
   // ─── Recorded Vitals ─────
 
   const renderVitals = () => {
-    const v = patientData.vitals || {};
+    const v = currentVitals || {};
     const hasVitals = v.temp || v.pulse || v.spo2 || v.bs || v.bp;
     return (
       <View style={[styles.sectionCard, { backgroundColor: colors.surface }]}> 
@@ -523,7 +653,7 @@ const ConsultingPatient = () => {
         <Ionicons name="eye-outline" size={20} color={colors.text} />
         <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('Allergies')}</Text>
       </View>
-      <Text style={[styles.sectionValue, { color: colors.mutedText }]}>{patientData.allergies || t('None reported')}</Text>
+      <Text style={[styles.sectionValue, { color: colors.mutedText }]}>{currentAllergies || t('None reported')}</Text>
     </View>
   );
 
@@ -536,14 +666,14 @@ const ConsultingPatient = () => {
           <Ionicons name="document-text-outline" size={20} color={colors.text} />
           <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('Notes from Registration Desk')}</Text>
         </View>
-        <Text style={[styles.sectionValue, { color: colors.mutedText }]}>{patientData.registrationNotes || t('No notes')}</Text>
+        <Text style={[styles.sectionValue, { color: colors.mutedText }]}>{currentRegistrationNotes || t('No notes')}</Text>
       </View>
       <View style={[styles.sectionCard, { backgroundColor: colors.surface }]}> 
         <View style={styles.sectionHeader}>
           <Ionicons name="document-text-outline" size={20} color={colors.text} />
           <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('Notes from Vitals Desk')}</Text>
         </View>
-        <Text style={[styles.sectionValue, { color: colors.mutedText }]}>{patientData.vitalsNotes || t('No notes')}</Text>
+        <Text style={[styles.sectionValue, { color: colors.mutedText }]}>{currentVitalsNotes || t('No notes')}</Text>
       </View>
     </>
   );
@@ -553,6 +683,8 @@ const ConsultingPatient = () => {
   const renderStep1 = () => (
     <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 100 }}>
       {renderPatientInfo()}
+      {historyLoading ? <Text style={[styles.noDataText, { marginHorizontal: 20, marginTop: 8, color: colors.mutedText }]}>{t('Loading patient history...')}</Text> : null}
+      {historyError ? <Text style={[styles.noDataText, { marginHorizontal: 20, marginTop: 8, color: '#DC2626' }]}>{historyError}</Text> : null}
       {renderComplaints()}
       {renderVitals()}
       {renderAllergies()}
@@ -881,11 +1013,12 @@ const ConsultingPatient = () => {
           <Text style={[styles.prevBtnText, { color: colors.text }]}>{t('Prev')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.primaryBtnFlex}
+          style={[styles.primaryBtnFlex, submitting && styles.primaryBtnDisabled]}
           onPress={handleMarkAsDone}
+          disabled={submitting}
           activeOpacity={0.85}
         >
-          <Text style={styles.primaryBtnText}>{t('Mark as Done')}</Text>
+          <Text style={styles.primaryBtnText}>{submitting ? t('Saving...') : t('Mark as Done')}</Text>
           <Ionicons name="arrow-forward" size={18} color="#fff" />
         </TouchableOpacity>
       </View>

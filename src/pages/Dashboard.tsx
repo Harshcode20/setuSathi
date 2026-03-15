@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Image, Alert, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -8,7 +8,7 @@ const doctorAvatarImg = require('../assets/doctor-avatar.jpg');
 import BottomNav from '../components/BottomNav';
 import { usePatientStore } from '../lib/PatientStore';
 import { useAuth } from '../lib/AuthContext';
-import { authService } from '../lib/api';
+import { authService, opdService } from '../lib/api';
 import { usePreferences } from '../lib/PreferencesContext';
 
 const Dashboard = () => {
@@ -21,6 +21,7 @@ const Dashboard = () => {
   const profileImageSource = userProfile?.photoUri ? { uri: userProfile.photoUri } : doctorAvatarImg;
   const today = new Date().toLocaleDateString(language === 'gu' ? 'gu-IN' : 'en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   const isDark = theme === 'dark';
+  const [opdStats, setOpdStats] = useState({ totalOPDs: 0, vitalsRecorded: 0, consultsDone: 0, medicinesGiven: 0 });
 
   const handleLogout = () => {
     if (Platform.OS === 'web') {
@@ -40,8 +41,37 @@ const Dashboard = () => {
   };
   const todayISO = new Date().toISOString().split('T')[0];
   const registeredToday = patients.filter(p => p.registeredAt === todayISO).length;
+  const totalPatients = patients.length;
 
-  const opdStats = { totalOPDs: 12, totalPatients: patients.length, registeredToday, vitalsRecorded: 24, consultsDone: 18, medicinesGiven: 15 };
+  useEffect(() => {
+    let mounted = true;
+
+    const loadStats = async () => {
+      try {
+        const stats = await opdService.getStats();
+        if (mounted && stats) {
+          setOpdStats({
+            totalOPDs: Number(stats.totalOPDs || 0),
+            vitalsRecorded: Number(stats.vitalsRecorded || 0),
+            consultsDone: Number(stats.consultsDone || 0),
+            medicinesGiven: Number(stats.medicinesGiven || 0),
+          });
+        }
+      } catch (err) {
+        if (mounted) {
+          console.warn('Failed to load OPD stats:', err);
+        }
+      }
+    };
+
+    loadStats();
+    const timer = setInterval(loadStats, 5000);
+
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+    };
+  }, []);
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -91,14 +121,14 @@ const Dashboard = () => {
               </View>
               <View style={[styles.bigStat, { backgroundColor: 'rgba(13,148,136,0.1)' }]}>
                 <Ionicons name="people-outline" size={20} color="#0D9488" />
-                <Text style={[styles.bigStatNum, { color: '#0D9488' }]}>{opdStats.totalPatients}</Text>
+                <Text style={[styles.bigStatNum, { color: '#0D9488' }]}>{totalPatients}</Text>
                 <Text style={[styles.bigStatLabel, { color: colors.mutedText }]}>{t('dashboard.totalPatients')}</Text>
               </View>
             </View>
             <View style={styles.smallStatsRow}>
               <View style={[styles.smallStat, { backgroundColor: colors.subSurface }]}> 
                 <MaterialCommunityIcons name="clipboard-plus-outline" size={16} color="#F97316" />
-                <Text style={[styles.smallStatNum, { color: colors.text }]}>{opdStats.registeredToday}</Text>
+                <Text style={[styles.smallStatNum, { color: colors.text }]}>{registeredToday}</Text>
                 <Text style={[styles.smallStatLabel, { color: colors.mutedText }]}>{t('dashboard.registered')}</Text>
               </View>
               <View style={[styles.smallStat, { backgroundColor: colors.subSurface }]}> 

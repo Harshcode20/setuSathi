@@ -2,9 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, FlatList, Animated } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { FIREBASE_CONFIG, USE_BACKEND } from '../lib/config';
+import { USE_BACKEND } from '../lib/config';
+import { opdService, QueueStatus } from '../lib/api';
 import { usePreferences } from '../lib/PreferencesContext';
 
 type Patient = {
@@ -13,6 +12,9 @@ type Patient = {
   gender: string;
   age: number;
   token: number;
+  queueStatus?: QueueStatus;
+  complaints?: string[];
+  registrationNotes?: string;
 };
 
 type OPDSession = {
@@ -32,23 +34,34 @@ const DoctorOPDSession = () => {
   const opdId = session?.opdId || 'OPD-UNKNOWN';
   const sessionPin = session?.pin || '';
 
-  // Live patient list — starts with what was passed, then updated by Firestore listener
+  // Live patient list — starts with what was passed, then updated by backend polling
   const [patients, setPatients] = useState<Patient[]>(session?.patients || []);
 
   useEffect(() => {
-    const hasValidFirebaseConfig = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_FIREBASE_API_KEY';
-    if (!hasValidFirebaseConfig || !USE_BACKEND || !sessionPin) return;
+    if (!USE_BACKEND || !sessionPin) return;
 
-    const unsubscribe = onSnapshot(doc(db, 'opd_sessions', sessionPin), (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        setPatients(data.patients || []);
+    let mounted = true;
+
+    const refreshQueue = async () => {
+      try {
+        const latest = await opdService.joinByPin(sessionPin);
+        if (mounted && latest?.patients) {
+          setPatients(latest.patients);
+        }
+      } catch (err) {
+        console.warn('Failed to refresh OPD queue:', err);
       }
-    });
-    return () => unsubscribe();
+    };
+
+    refreshQueue();
+    const timer = setInterval(refreshQueue, 3000);
+
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+    };
   }, [sessionPin]);
 
-  const [consultDone, setConsultDone] = useState(0);
   const [toastMsg, setToastMsg] = useState('');
   const toastOpacity = useState(new Animated.Value(0))[0];
 
@@ -56,7 +69,6 @@ const DoctorOPDSession = () => {
   useEffect(() => {
     const completedToken = (route.params as any)?.completedToken;
     if (completedToken) {
-      setConsultDone((prev) => prev + 1);
       setToastMsg(`${t('Consultation for Token')} #${completedToken} ${t('is complete.')}`);
       Animated.sequence([
         Animated.timing(toastOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
@@ -69,7 +81,12 @@ const DoctorOPDSession = () => {
   }, [(route.params as any)?.completedToken]);
 
   const totalCases = patients.length;
-  const inQueue = totalCases - consultDone;
+  const consultDone = patients.filter((patient) => {
+    const status = patient.queueStatus || 'waiting_vitals';
+    return status === 'consult_done' || status === 'completed';
+  }).length;
+  const readyForDoctorPatients = patients.filter((patient) => (patient.queueStatus || 'waiting_vitals') === 'waiting_doctor');
+  const inQueue = readyForDoctorPatients.length;
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -112,14 +129,14 @@ const DoctorOPDSession = () => {
       </View>
 
       <FlatList
-        data={patients}
+        data={readyForDoctorPatients}
         keyExtractor={(item) => item.id + item.token}
         contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 30 }}
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.patientCard}
             activeOpacity={0.7}
-            onPress={() => (navigation as any).navigate('ConsultingPatient', { patient: item })}
+            onPress={() => (navigation as any).navigate('ConsultingPatient', { patient: item, sessionPin, opdId })}
           >
             <View style={styles.tokenCircle}>
               <Text style={styles.tokenText}>{item.token}</Text>

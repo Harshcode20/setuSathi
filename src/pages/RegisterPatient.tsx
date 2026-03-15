@@ -113,7 +113,7 @@ const RegisterPatient = () => {
     const today = new Date();
     const lastVisit = today.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     try {
-      await addPatient({
+      const { patient, reusedExisting } = await addPatient({
         name: fullName.trim(),
         gender: gender === 'male' ? 'Male' : 'Female',
         age: parseInt(age) || 0,
@@ -123,7 +123,11 @@ const RegisterPatient = () => {
         photoUri: photoUri || undefined,
         lastVisit,
       });
-      toast.show(`✅ ${t('Patient registered successfully!')}`);
+      if (reusedExisting) {
+        toast.show(`ℹ️ Existing patient found. Using Patient ID ${patient.id}`, 'success');
+      } else {
+        toast.show(`✅ ${t('Patient registered successfully!')}`);
+      }
       setTimeout(() => navigation.navigate('Dashboard' as never), 600);
     } catch (err: any) {
       Alert.alert(t('Registration Failed'), err?.message || t('Could not register patient. Please try again.'));

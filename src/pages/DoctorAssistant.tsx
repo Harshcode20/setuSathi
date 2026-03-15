@@ -1,58 +1,96 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { clinicalService, opdService, QueueStatus } from '../lib/api';
 import { usePreferences } from '../lib/PreferencesContext';
 
-const mockQueue = [
-  { id: 'P1234', name: 'Dharamshinhbhai Prajapati', gender: 'Male', age: 58, token: 1 },
-  { id: 'P1235', name: 'Manguben Solanki', gender: 'Female', age: 58, token: 2 },
-  { id: 'P1236', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 3 },
-  { id: 'P1237', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 4 },
-  { id: 'P1238', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 5 },
-  { id: 'P1239', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 6 },
-];
+type QueuePatient = {
+  id: string;
+  name: string;
+  gender: string;
+  age: number;
+  token: number;
+  queueStatus?: QueueStatus;
+  complaints?: string[];
+  vitals?: {
+    temp?: string;
+    pulse?: string;
+    bpUpper?: string;
+    bpLower?: string;
+    spo2?: string;
+    bloodSugar?: string;
+  };
+  allergies?: string;
+  registrationNotes?: string;
+  vitalsNotes?: string;
+};
 
-const mockComplaints = ['1.1 શરીરનો દુઃખાવો', '2.1 તાવ', '3.1 ખંજવાળ', '4.1 ચક્કર'];
-const mockVitals = { temp: '98.2', pulse: '86', bpUpper: '140', bpLower: '120', spo2: '99', bloodSugar: '120' };
+type HistoryVitals = {
+  temp?: string;
+  pulse?: string;
+  bp?: string;
+  bs?: string;
+  spo2?: string;
+};
 
-const diagnosisOptions = [
-  { id: '5.1', label: 'Arthritis' }, { id: '5.2', label: 'Asthma' },
-  { id: '5.3', label: 'Boils' }, { id: '5.4', label: 'Diarrhea' },
-  { id: '5.5', label: 'Diabetes' }, { id: '5.6', label: 'Hypertension' },
-  { id: '5.7', label: 'Malaria' }, { id: '5.8', label: 'Typhoid' },
-];
+type HistoryMedicine = {
+  id?: string;
+  name?: string;
+  dosage?: string;
+  days?: string | number;
+  timing?: string;
+};
 
-const labTestOptions = [
-  { id: '6.1', label: 'CBC' }, { id: '6.2', label: 'Urine Test' },
-  { id: '6.3', label: 'Blood Sugar' }, { id: '6.4', label: 'Thyroid' },
-  { id: '6.5', label: 'Lipid Profile' },
-];
-
-interface Medicine { name: string; dosage: string; days: string; }
+type PatientHistoryEntry = {
+  id: string;
+  date: string;
+  consulted_by?: string;
+  complaints?: string[];
+  vitals?: HistoryVitals | null;
+  allergies?: string | null;
+  registration_notes?: string | null;
+  vitals_notes?: string | null;
+  diagnosis?: string[];
+  lab_tests?: string[];
+  medicines?: HistoryMedicine[];
+};
 
 type ViewState = 'pin' | 'queue' | 'consult';
 
 const DoctorAssistant = () => {
   const navigation = useNavigation();
+  const route = useRoute();
   const { t, colors } = usePreferences();
   const pinRefs = useRef<Array<TextInput | null>>([]);
+  const presetPin = typeof (route.params as any)?.pin === 'string' ? (route.params as any).pin : '';
+  const presetOpdId = typeof (route.params as any)?.opdId === 'string' ? (route.params as any).opdId : '';
+  const defaultPin = presetPin.length === 6 ? presetPin.split('') : ['', '', '', '', '', ''];
 
   const [view, setView] = useState<ViewState>('pin');
-  const [pin, setPin] = useState(['', '', '', '', '', '']);
-  const [consultDone, setConsultDone] = useState<number[]>([]);
-  const [activePatient, setActivePatient] = useState<typeof mockQueue[0] | null>(null);
+  const [pin, setPin] = useState<string[]>(defaultPin);
+  const [activePatient, setActivePatient] = useState<QueuePatient | null>(null);
+  const [patientHistory, setPatientHistory] = useState<PatientHistoryEntry[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState('');
+  const [queuePatients, setQueuePatients] = useState<QueuePatient[]>([]);
+  const [sessionPin, setSessionPin] = useState<string>(presetPin);
+  const [opdId, setOpdId] = useState<string>(presetOpdId);
+  const [joining, setJoining] = useState(false);
 
   const [complaintsOpen, setComplaintsOpen] = useState(true);
   const [vitalsOpen, setVitalsOpen] = useState(false);
-  const [selectedDiagnosis, setSelectedDiagnosis] = useState<Set<string>>(new Set());
-  const [selectedLabTests, setSelectedLabTests] = useState<Set<string>>(new Set());
-  const [medicines, setMedicines] = useState<Medicine[]>([]);
 
-  const opdId = 'OPD-RAMAGRI-250622';
-  const totalCases = mockQueue.length;
-  const completed = consultDone.length;
-  const inQueue = totalCases - completed;
+  const doctorVisiblePatients = queuePatients.filter((patient) => {
+    const status = patient.queueStatus || 'waiting_vitals';
+    return status === 'waiting_doctor' || status === 'consult_done' || status === 'completed';
+  });
+  const totalCases = doctorVisiblePatients.length;
+  const completed = doctorVisiblePatients.filter((patient) => {
+    const status = patient.queueStatus || 'waiting_vitals';
+    return status === 'consult_done' || status === 'completed';
+  }).length;
+  const inQueue = doctorVisiblePatients.filter((patient) => (patient.queueStatus || 'waiting_vitals') === 'waiting_doctor').length;
   const pinString = pin.join('');
 
   const handlePinChange = (text: string, index: number) => {
@@ -63,35 +101,100 @@ const DoctorAssistant = () => {
     if (val && index < 5) pinRefs.current[index + 1]?.focus();
   };
 
-  const handleJoinOPD = () => { if (pinString.length === 6) setView('queue'); };
+  const joinOpdSession = async (pinValue: string) => {
+    setJoining(true);
+    try {
+      const session = await opdService.joinByPin(pinValue);
+      if (!session) {
+        Alert.alert(t('Invalid PIN'), t('No active OPD session found for this PIN.'));
+        return;
+      }
 
-  const handleSelectPatient = (patient: typeof mockQueue[0]) => {
-    setActivePatient(patient);
-    setComplaintsOpen(true); setVitalsOpen(false);
-    setSelectedDiagnosis(new Set()); setSelectedLabTests(new Set());
-    setMedicines([]);
-    setView('consult');
-  };
-
-  const toggleDiagnosis = (id: string) => {
-    setSelectedDiagnosis((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  };
-  const toggleLabTest = (id: string) => {
-    setSelectedLabTests((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  };
-
-  const addMedicine = () => setMedicines((prev) => [...prev, { name: '', dosage: '1-0-1', days: '3' }]);
-  const updateMedicine = (i: number, field: keyof Medicine, value: string) => {
-    setMedicines((prev) => prev.map((m, idx) => idx === i ? { ...m, [field]: value } : m));
-  };
-  const removeMedicine = (i: number) => setMedicines((prev) => prev.filter((_, idx) => idx !== i));
-
-  const handleSubmitConsult = () => {
-    if (activePatient) {
-      setConsultDone((prev) => [...prev, activePatient.token]);
-      Alert.alert(t('Consultation Complete'), `${activePatient.name} ${t('consultation submitted successfully.')}`);
-      setActivePatient(null);
+      setSessionPin(session.pin);
+      setOpdId(session.opdId);
+      setQueuePatients(session.patients || []);
       setView('queue');
+    } catch (err: any) {
+      Alert.alert(t('Unable to Join'), err?.message || t('Could not join OPD session.'));
+    } finally {
+      setJoining(false);
+    }
+  };
+
+  const handleJoinOPD = () => {
+    if (pinString.length === 6) {
+      joinOpdSession(pinString);
+    }
+  };
+
+  useEffect(() => {
+    if (presetPin.length === 6) {
+      joinOpdSession(presetPin);
+    }
+  }, [presetPin]);
+
+  useEffect(() => {
+    if (!sessionPin || view === 'pin') return;
+
+    let mounted = true;
+
+    const refreshQueue = async () => {
+      try {
+        const session = await opdService.joinByPin(sessionPin);
+        if (mounted && session) {
+          setQueuePatients(session.patients || []);
+          setOpdId(session.opdId);
+        }
+      } catch (err) {
+        if (mounted) {
+          console.warn('Failed to refresh doctor queue:', err);
+        }
+      }
+    };
+
+    refreshQueue();
+    const timer = setInterval(refreshQueue, 3000);
+
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+    };
+  }, [sessionPin, view]);
+
+  const getPatientNumericId = (patientRef: string) => {
+    const parsed = Number(String(patientRef).replace(/\D/g, ''));
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  };
+
+  const closeDetails = () => {
+    setView('queue');
+    setActivePatient(null);
+    setPatientHistory([]);
+    setHistoryError('');
+    setHistoryLoading(false);
+  };
+
+  const handleSelectPatient = async (patient: QueuePatient) => {
+    setActivePatient(patient);
+    setPatientHistory([]);
+    setHistoryError('');
+    setComplaintsOpen(true);
+    setVitalsOpen(false);
+    setView('consult');
+    const patientId = getPatientNumericId(patient.id);
+    if (!patientId) {
+      setHistoryError(t('Unable to identify patient for loading history.'));
+      return;
+    }
+
+    setHistoryLoading(true);
+    try {
+      const history = await clinicalService.getPatientHistory(String(patientId)) as PatientHistoryEntry[];
+      setPatientHistory(Array.isArray(history) ? history : []);
+    } catch (err: any) {
+      setHistoryError(err?.message || t('Could not load patient history.'));
+    } finally {
+      setHistoryLoading(false);
     }
   };
 
@@ -117,8 +220,8 @@ const DoctorAssistant = () => {
           </View>
         </View>
         <View style={s.bottomBar}>
-          <TouchableOpacity style={[s.primaryBtn, pinString.length < 6 && s.primaryBtnDisabled]} disabled={pinString.length < 6} onPress={handleJoinOPD} activeOpacity={0.85}>
-            <Text style={s.primaryBtnText}>{t('Join OPD')}</Text><Ionicons name="arrow-forward" size={18} color="#fff" />
+          <TouchableOpacity style={[s.primaryBtn, pinString.length < 6 && s.primaryBtnDisabled]} disabled={pinString.length < 6 || joining} onPress={handleJoinOPD} activeOpacity={0.85}>
+            <Text style={s.primaryBtnText}>{joining ? t('Joining...') : t('Join OPD')}</Text><Ionicons name="arrow-forward" size={18} color="#fff" />
           </TouchableOpacity>
           <View style={s.noteRow}><View style={s.noteLine} /><Text style={s.noteLabel}>{t('Note')}</Text><View style={s.noteLine} /></View>
           <Text style={s.noteText}>{t('Ask your Registration Desk teammate to share 6 digit PIN with you')}</Text>
@@ -127,121 +230,140 @@ const DoctorAssistant = () => {
     );
   }
 
-  // Consult Screen
+  // Consult Screen (read-only)
   if (view === 'consult' && activePatient) {
+    const latestEntry = patientHistory.length > 0 ? patientHistory[0] : null;
+    const complaints = (latestEntry?.complaints && latestEntry.complaints.length > 0)
+      ? latestEntry.complaints
+      : (activePatient.complaints || []);
+    const vitals = latestEntry?.vitals || null;
+    const allergies = latestEntry?.allergies || activePatient.allergies || '';
+    const registrationNotes = latestEntry?.registration_notes || activePatient.registrationNotes || '';
+    const vitalsNotes = latestEntry?.vitals_notes || activePatient.vitalsNotes || '';
+    const diagnosisList = latestEntry?.diagnosis || [];
+    const labTests = latestEntry?.lab_tests || [];
+    const medicines = patientHistory.flatMap((entry) => Array.isArray(entry.medicines) ? entry.medicines : []);
+
     return (
       <View style={[s.root, { backgroundColor: colors.background }]}> 
         <View style={s.blueHeader}>
-          <Text style={s.blueHeaderTitle}>{t('Consulting Patient')}</Text>
-          <TouchableOpacity onPress={() => setView('queue')}><Ionicons name="close" size={24} color="#fff" /></TouchableOpacity>
+          <Text style={s.blueHeaderTitle}>{t("Doctor's Assistant")}</Text>
+          <TouchableOpacity onPress={closeDetails}><Ionicons name="close" size={24} color="#fff" /></TouchableOpacity>
         </View>
 
-        {/* Patient Info */}
         <View style={s.patientCard}>
           <View style={{ flex: 1 }}>
             <Text style={s.smallLabel}>Patient Info.</Text>
             <Text style={s.smallLabel}>{activePatient.id}</Text>
             <Text style={s.patientName}>{activePatient.name}</Text>
             <Text style={s.patientSub}>{activePatient.gender} • {activePatient.age} Yrs</Text>
+            {latestEntry?.date ? <Text style={s.smallLabel}>Last Visit: {latestEntry.date}</Text> : null}
           </View>
           <View style={s.tokenBadge}><Text style={s.tokenBadgeText}>{activePatient.token}</Text></View>
         </View>
 
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 100, paddingHorizontal: 20 }}>
-          {/* Complaints */}
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 90, paddingHorizontal: 20 }}>
+          {historyLoading ? (
+            <View style={s.loadingWrap}>
+              <ActivityIndicator size="small" color="#2563EB" />
+              <Text style={s.loadingText}>{t('Loading patient history...')}</Text>
+            </View>
+          ) : null}
+
+          {historyError ? <Text style={s.errorText}>{historyError}</Text> : null}
+
           <TouchableOpacity style={s.collapsible} onPress={() => setComplaintsOpen(!complaintsOpen)}>
             <View style={s.collLeft}><Ionicons name="document-text-outline" size={18} color="#2563EB" /><Text style={s.collTitle}>{t('Patient Complaints')}</Text></View>
             <Ionicons name={complaintsOpen ? 'chevron-up' : 'chevron-down'} size={20} color="#2563EB" />
           </TouchableOpacity>
           {complaintsOpen && (
             <View style={s.tagsRow}>
-              {mockComplaints.map((c) => (<View key={c} style={s.tag}><Text style={s.tagText}>{c}</Text></View>))}
+              {complaints.length > 0 ? complaints.map((complaint, index) => (
+                <View key={`${complaint}-${index}`} style={s.tag}><Text style={s.tagText}>{complaint}</Text></View>
+              )) : <Text style={s.vitalsInfoItem}>{t('No complaints recorded')}</Text>}
             </View>
           )}
 
-          {/* Vitals */}
           <TouchableOpacity style={[s.collapsible, { marginTop: 8 }]} onPress={() => setVitalsOpen(!vitalsOpen)}>
             <View style={s.collLeft}><Ionicons name="heart-outline" size={18} color="#999" /><Text style={s.collTitle}>{t('Recorded Vitals')}</Text></View>
             <Ionicons name={vitalsOpen ? 'chevron-up' : 'chevron-down'} size={20} color="#2563EB" />
           </TouchableOpacity>
           {vitalsOpen && (
             <View style={s.vitalsInfo}>
-              <View style={s.vitalsInfoRow}>
-                <Text style={s.vitalsInfoItem}>Temp. <Text style={s.bold}>{mockVitals.temp} F</Text></Text>
-                <Text style={s.vitalsInfoItem}>B.S. <Text style={s.bold}>{mockVitals.bloodSugar}</Text></Text>
-              </View>
-              <View style={s.vitalsInfoRow}>
-                <Text style={s.vitalsInfoItem}>Pulse <Text style={s.bold}>{mockVitals.pulse} bpm</Text></Text>
-                <Text style={s.vitalsInfoItem}>B.P. <Text style={s.bold}>{mockVitals.bpUpper}/{mockVitals.bpLower}</Text></Text>
-              </View>
-              <Text style={s.vitalsInfoItem}>SPO2 <Text style={s.bold}>{mockVitals.spo2}</Text></Text>
+              {(vitals?.temp || vitals?.bs || vitals?.pulse || vitals?.bp || vitals?.spo2) ? (
+                <>
+                  <View style={s.vitalsInfoRow}>
+                    <Text style={s.vitalsInfoItem}>Temp. <Text style={s.bold}>{vitals?.temp || '-'}</Text></Text>
+                    <Text style={s.vitalsInfoItem}>B.S. <Text style={s.bold}>{vitals?.bs || '-'}</Text></Text>
+                  </View>
+                  <View style={s.vitalsInfoRow}>
+                    <Text style={s.vitalsInfoItem}>Pulse <Text style={s.bold}>{vitals?.pulse || '-'}{vitals?.pulse ? ' bpm' : ''}</Text></Text>
+                    <Text style={s.vitalsInfoItem}>B.P. <Text style={s.bold}>{vitals?.bp || '-'}</Text></Text>
+                  </View>
+                  <Text style={s.vitalsInfoItem}>SPO2 <Text style={s.bold}>{vitals?.spo2 || '-'}</Text></Text>
+                </>
+              ) : (
+                <Text style={s.vitalsInfoItem}>{t('No vitals recorded yet')}</Text>
+              )}
               <View style={s.vitalsInfoDivider} />
-              <Text style={s.vitalsInfoItem}>Allergies: <Text style={{ color: '#999' }}>Smoke Allergie</Text></Text>
+              <Text style={s.vitalsInfoItem}>Allergies: <Text style={{ color: '#999' }}>{allergies || t('None reported')}</Text></Text>
             </View>
           )}
 
-          {/* Notes from desks */}
           <View style={s.notesCard}>
             <View style={s.noteCardRow}>
               <Ionicons name="document-text-outline" size={16} color="#999" />
               <Text style={s.noteCardTitle}>Notes from Registration Desk</Text>
             </View>
-            <Text style={s.noteCardText}>Patient felt dizziy earlier today</Text>
+            <Text style={s.noteCardText}>{registrationNotes || t('No notes')}</Text>
             <View style={s.noteCardDivider} />
             <View style={s.noteCardRow}>
               <Ionicons name="document-text-outline" size={16} color="#999" />
               <Text style={s.noteCardTitle}>Notes from Vital Desk</Text>
             </View>
-            <Text style={s.noteCardText}>Patient felt dizziy earlier today</Text>
+            <Text style={s.noteCardText}>{vitalsNotes || t('No notes')}</Text>
           </View>
 
-          {/* Diagnosis */}
           <View style={s.sectionCard}>
             <View style={s.sectionCardHeader}><MaterialCommunityIcons name="stethoscope" size={18} color="#999" /><Text style={s.sectionCardTitle}>{t("Doctor's Diagnosis")}</Text></View>
             <View style={s.tagsRow}>
-              {diagnosisOptions.map((d) => (
-                <TouchableOpacity key={d.id} style={[s.selectTag, selectedDiagnosis.has(d.id) && s.selectTagActive]} onPress={() => toggleDiagnosis(d.id)}>
-                  <Text style={[s.selectTagText, selectedDiagnosis.has(d.id) && s.selectTagTextActive]}>{d.id} {d.label}</Text>
-                </TouchableOpacity>
-              ))}
+              {diagnosisList.length > 0 ? diagnosisList.map((item, index) => (
+                <View key={`${item}-${index}`} style={s.tag}><Text style={s.tagText}>{item}</Text></View>
+              )) : <Text style={s.emptyMedText}>{t('No diagnosis recorded')}</Text>}
             </View>
 
             <View style={s.noteCardDivider} />
             <View style={s.sectionCardHeader}><Ionicons name="document-text-outline" size={18} color="#999" /><Text style={s.sectionCardTitle}>{t('Labtest Investigation')}</Text></View>
             <View style={s.tagsRow}>
-              {labTestOptions.map((t) => (
-                <TouchableOpacity key={t.id} style={[s.selectTag, selectedLabTests.has(t.id) && s.selectTagActive]} onPress={() => toggleLabTest(t.id)}>
-                  <Text style={[s.selectTagText, selectedLabTests.has(t.id) && s.selectTagTextActive]}>{t.id} {t.label}</Text>
-                </TouchableOpacity>
-              ))}
+              {labTests.length > 0 ? labTests.map((item, index) => (
+                <View key={`${item}-${index}`} style={s.tag}><Text style={s.tagText}>{item}</Text></View>
+              )) : <Text style={s.emptyMedText}>{t('No lab tests recorded')}</Text>}
             </View>
           </View>
 
-          {/* Medicines */}
           <View style={s.sectionCard}>
             <View style={s.sectionCardHeader}>
               <MaterialCommunityIcons name="pill" size={18} color="#999" />
               <Text style={[s.sectionCardTitle, { flex: 1 }]}>{t('Prescribed Medicines')}</Text>
-              <TouchableOpacity onPress={addMedicine}><Ionicons name="add" size={22} color="#2563EB" /></TouchableOpacity>
             </View>
-            {medicines.length === 0 && <Text style={s.emptyMedText}>{t('Tap + to add medicines')}</Text>}
-            {medicines.map((med, i) => (
-              <View key={i} style={s.medRow}>
+            {medicines.length === 0 ? (
+              <Text style={s.emptyMedText}>{t('No prescribed medicines found in patient history')}</Text>
+            ) : medicines.map((med, index) => (
+              <View key={`${med.id || 'med'}-${med.name || 'name'}-${index}`} style={s.medHistoryRow}>
                 <MaterialCommunityIcons name="pill" size={16} color="#2563EB" />
-                <TextInput style={s.medNameInput} placeholder="Medicine name" placeholderTextColor="#ccc" value={med.name} onChangeText={(v) => updateMedicine(i, 'name', v)} maxLength={100} />
-                <TextInput style={s.medSmallInput} placeholder="1-0-1" placeholderTextColor="#ccc" value={med.dosage} onChangeText={(v) => updateMedicine(i, 'dosage', v)} maxLength={10} textAlign="center" />
-                <TextInput style={s.medSmallInput} placeholder="3" placeholderTextColor="#ccc" value={med.days} onChangeText={(v) => updateMedicine(i, 'days', v)} maxLength={5} textAlign="center" />
-                <Text style={s.medDaysLabel}>days</Text>
-                <TouchableOpacity onPress={() => removeMedicine(i)}><Ionicons name="trash-outline" size={16} color="#EF4444" /></TouchableOpacity>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.medHistoryName}>{`${med.id || ''} ${med.name || ''}`.trim() || t('Unnamed medicine')}</Text>
+                  <Text style={s.medHistoryMeta}>{`${med.dosage || '-'} • ${med.days ?? '-'} ${t('days')} • ${med.timing || '-'}`}</Text>
+                </View>
               </View>
             ))}
           </View>
         </ScrollView>
 
         <View style={s.bottomBar}>
-          <TouchableOpacity style={s.primaryBtn} onPress={handleSubmitConsult} activeOpacity={0.85}>
-            <Ionicons name="checkmark" size={18} color="#fff" />
-            <Text style={s.primaryBtnText}>{t('Complete & Take Next Patient')}</Text>
+          <TouchableOpacity style={s.primaryBtn} onPress={closeDetails} activeOpacity={0.85}>
+            <Ionicons name="arrow-back" size={18} color="#fff" />
+            <Text style={s.primaryBtnText}>{t('Back to Queue')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -257,7 +379,7 @@ const DoctorAssistant = () => {
         </TouchableOpacity>
         <View style={{ flex: 1, marginLeft: 12 }}>
           <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#111' }}>{t("Doctor's Assistant")}</Text>
-          <Text style={{ fontSize: 13, color: '#999', marginTop: 2 }}>{opdId}</Text>
+          <Text style={{ fontSize: 13, color: '#999', marginTop: 2 }}>{opdId || 'OPD-UNKNOWN'}</Text>
         </View>
         <TouchableOpacity><Ionicons name="ellipsis-vertical" size={20} color="#999" /></TouchableOpacity>
       </View>
@@ -284,8 +406,9 @@ const DoctorAssistant = () => {
 
       <ScrollView style={{ flex: 1, paddingHorizontal: 20, paddingTop: 16 }}>
         <View style={s.queueList}>
-          {mockQueue.map((p) => {
-            const done = consultDone.includes(p.token);
+          {doctorVisiblePatients.map((p) => {
+            const status = p.queueStatus || 'waiting_vitals';
+            const done = status === 'consult_done' || status === 'completed';
             return (
               <TouchableOpacity key={p.token} style={[s.queueItem, done && { opacity: 0.5 }]} onPress={() => !done && handleSelectPatient(p)} disabled={done}>
                 <View style={s.queueToken}><Text style={s.queueTokenText}>{p.token}</Text></View>
@@ -294,7 +417,7 @@ const DoctorAssistant = () => {
                   <Text style={s.queueSub}>{p.id} • {p.gender} • {p.age} Yrs</Text>
                 </View>
                 {done ? (
-                  <View style={s.doneBadge}><Text style={s.doneBadgeText}>Done</Text></View>
+                  <View style={s.doneBadge}><Text style={s.doneBadgeText}>{t('Done')}</Text></View>
                 ) : (
                   <Ionicons name="chevron-forward" size={18} color="#999" />
                 )}
@@ -355,7 +478,13 @@ const s = StyleSheet.create({
   selectTagActive: { backgroundColor: '#2563EB' },
   selectTagText: { fontSize: 13, color: '#111', fontWeight: '500' },
   selectTagTextActive: { color: '#fff' },
+  loadingWrap: { backgroundColor: '#fff', borderRadius: 12, padding: 12, alignItems: 'center', marginTop: 12, marginBottom: 8 },
+  loadingText: { fontSize: 13, color: '#2563EB', marginTop: 8 },
+  errorText: { fontSize: 13, color: '#DC2626', marginTop: 8, marginBottom: 4 },
   emptyMedText: { fontSize: 13, color: '#999', textAlign: 'center', paddingVertical: 12 },
+  medHistoryRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 10 },
+  medHistoryName: { fontSize: 13, fontWeight: '600', color: '#111' },
+  medHistoryMeta: { fontSize: 12, color: '#999', marginTop: 2 },
   medRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
   medNameInput: { flex: 1, borderWidth: 1, borderColor: '#e5e5e5', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6, fontSize: 13, color: '#111' },
   medSmallInput: { width: 50, borderWidth: 1, borderColor: '#e5e5e5', borderRadius: 8, paddingHorizontal: 4, paddingVertical: 6, fontSize: 13, color: '#111' },

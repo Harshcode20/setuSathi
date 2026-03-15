@@ -1,29 +1,37 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
+import { clinicalService, opdService, QueueStatus } from '../lib/api';
 import { usePreferences } from '../lib/PreferencesContext';
 
-const mockQueue = [
-  { id: 'P1234', name: 'Dharamshinhbhai Prajapati', gender: 'Male', age: 58, token: 1 },
-  { id: 'P1235', name: 'Manguben Solanki', gender: 'Female', age: 58, token: 2 },
-  { id: 'P1236', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 3 },
-  { id: 'P1237', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 4 },
-  { id: 'P1238', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 5 },
-  { id: 'P1239', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 6 },
-];
+type QueuePatient = {
+  id: string;
+  name: string;
+  gender: string;
+  age: number;
+  token: number;
+  queueStatus?: QueueStatus;
+};
 
 type ViewState = 'pin' | 'queue' | 'record';
 
 const VitalsDesk = () => {
   const navigation = useNavigation();
+  const route = useRoute();
   const { t, colors } = usePreferences();
   const pinRefs = useRef<Array<TextInput | null>>([]);
+  const presetPin = typeof (route.params as any)?.pin === 'string' ? (route.params as any).pin : '';
+  const presetOpdId = typeof (route.params as any)?.opdId === 'string' ? (route.params as any).opdId : '';
+  const defaultPin = presetPin.length === 6 ? presetPin.split('') : ['', '', '', '', '', ''];
 
   const [view, setView] = useState<ViewState>('pin');
-  const [pin, setPin] = useState(['', '', '', '', '', '']);
-  const [vitalsDone, setVitalsDone] = useState<number[]>([]);
-  const [activePatient, setActivePatient] = useState<typeof mockQueue[0] | null>(null);
+  const [pin, setPin] = useState<string[]>(defaultPin);
+  const [activePatient, setActivePatient] = useState<QueuePatient | null>(null);
+  const [queuePatients, setQueuePatients] = useState<QueuePatient[]>([]);
+  const [sessionPin, setSessionPin] = useState<string>(presetPin);
+  const [opdId, setOpdId] = useState<string>(presetOpdId);
+  const [joining, setJoining] = useState(false);
   const [complaintsOpen, setComplaintsOpen] = useState(false);
 
   // Vitals form
@@ -38,10 +46,10 @@ const VitalsDesk = () => {
   const [allergies, setAllergies] = useState('');
   const [notes, setNotes] = useState('');
 
-  const opdId = 'OPD-RAMAGRI-250622';
-  const totalCases = mockQueue.length;
-  const vitalsCompleted = vitalsDone.length;
-  const inQueue = totalCases - vitalsCompleted;
+  const totalCases = queuePatients.length;
+  const vitalsCompleted = queuePatients.filter((patient) => (patient.queueStatus || 'waiting_vitals') !== 'waiting_vitals').length;
+  const vitalsQueuePatients = queuePatients.filter((patient) => (patient.queueStatus || 'waiting_vitals') === 'waiting_vitals');
+  const inQueue = vitalsQueuePatients.length;
 
   const pinString = pin.join('');
 
@@ -55,11 +63,67 @@ const VitalsDesk = () => {
     }
   };
 
-  const handleJoinOPD = () => {
-    if (pinString.length === 6) setView('queue');
+  const joinOpdSession = async (pinValue: string) => {
+    setJoining(true);
+    try {
+      const session = await opdService.joinByPin(pinValue);
+      if (!session) {
+        Alert.alert(t('Invalid PIN'), t('No active OPD session found for this PIN.'));
+        return;
+      }
+
+      setSessionPin(session.pin);
+      setOpdId(session.opdId);
+      setQueuePatients(session.patients || []);
+      setView('queue');
+    } catch (err: any) {
+      Alert.alert(t('Unable to Join'), err?.message || t('Could not join OPD session.'));
+    } finally {
+      setJoining(false);
+    }
   };
 
-  const handleSelectPatient = (patient: typeof mockQueue[0]) => {
+  const handleJoinOPD = () => {
+    if (pinString.length === 6) {
+      joinOpdSession(pinString);
+    }
+  };
+
+  useEffect(() => {
+    if (presetPin.length === 6) {
+      joinOpdSession(presetPin);
+    }
+  }, [presetPin]);
+
+  useEffect(() => {
+    if (!sessionPin || view === 'pin') return;
+
+    let mounted = true;
+
+    const refreshQueue = async () => {
+      try {
+        const session = await opdService.joinByPin(sessionPin);
+        if (mounted && session) {
+          setQueuePatients(session.patients || []);
+          setOpdId(session.opdId);
+        }
+      } catch (err) {
+        if (mounted) {
+          console.warn('Failed to refresh vitals queue:', err);
+        }
+      }
+    };
+
+    refreshQueue();
+    const timer = setInterval(refreshQueue, 3000);
+
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+    };
+  }, [sessionPin, view]);
+
+  const handleSelectPatient = (patient: QueuePatient) => {
     setActivePatient(patient);
     setBodyTemp(''); setPulse(''); setBpUpper(''); setBpLower('');
     setSpo2(''); setBloodSugar(''); setHeight(''); setWeight('');
@@ -68,12 +132,52 @@ const VitalsDesk = () => {
     setView('record');
   };
 
-  const handleComplete = () => {
-    if (activePatient) {
-      setVitalsDone((prev) => [...prev, activePatient.token]);
-      Alert.alert(t('Vitals Recorded'), `${activePatient.name} ${t('vitals completed successfully.')}`);
+  const handleComplete = async () => {
+    if (!activePatient) return;
+
+    const patientId = Number(String(activePatient.id).replace(/\D/g, ''));
+    if (!Number.isFinite(patientId) || patientId <= 0) {
+      Alert.alert(t('Invalid Patient'), t('Unable to identify patient for vitals submission.'));
+      return;
+    }
+
+    try {
+      await clinicalService.recordVitals(String(patientId), {
+        temp: bodyTemp || null,
+        pulse: pulse || null,
+        bp: bpUpper || bpLower ? `${bpUpper || ''}/${bpLower || ''}` : null,
+        spo2: spo2 || null,
+        blood_sugar: bloodSugar || null,
+        allergies: allergies || null,
+        notes: notes || null,
+      });
+
+      let statusSynced = true;
+      if (sessionPin) {
+        try {
+          await opdService.updatePatientQueueStatus(sessionPin, activePatient.token, 'waiting_doctor');
+          setQueuePatients((prev) =>
+            prev.map((patient) =>
+              patient.token === activePatient.token
+                ? { ...patient, queueStatus: 'waiting_doctor' }
+                : patient
+            )
+          );
+        } catch (statusErr) {
+          statusSynced = false;
+          console.warn('Vitals saved but queue status update failed:', statusErr);
+        }
+      }
+
+      if (statusSynced) {
+        Alert.alert(t('Vitals Recorded'), `${activePatient.name} ${t('vitals completed successfully.')}`);
+      } else {
+        Alert.alert(t('Vitals Recorded'), t('Vitals were saved, but queue sync is still pending.'));
+      }
       setActivePatient(null);
       setView('queue');
+    } catch (err: any) {
+      Alert.alert(t('Failed to Save'), err?.message || t('Could not record vitals.'));
     }
   };
 
@@ -114,11 +218,11 @@ const VitalsDesk = () => {
         <View style={styles.bottomBar}>
           <TouchableOpacity
             style={[styles.primaryBtn, pinString.length < 6 && styles.primaryBtnDisabled]}
-            disabled={pinString.length < 6}
+            disabled={pinString.length < 6 || joining}
             onPress={handleJoinOPD}
             activeOpacity={0.85}
           >
-            <Text style={styles.primaryBtnText}>{t('Join OPD')}</Text>
+            <Text style={styles.primaryBtnText}>{joining ? t('Joining...') : t('Join OPD')}</Text>
             <Ionicons name="arrow-forward" size={18} color="#fff" />
           </TouchableOpacity>
           <View style={styles.noteRow}>
@@ -257,7 +361,7 @@ const VitalsDesk = () => {
         </TouchableOpacity>
         <View style={{ flex: 1, marginLeft: 12 }}>
           <Text style={styles.simpleHeaderTitle}>{t('Vitals Desk')}</Text>
-          <Text style={styles.headerSub}>{opdId}</Text>
+          <Text style={styles.headerSub}>{opdId || 'OPD-UNKNOWN'}</Text>
         </View>
         <TouchableOpacity>
           <Ionicons name="ellipsis-vertical" size={20} color="#999" />
@@ -298,14 +402,12 @@ const VitalsDesk = () => {
 
       <ScrollView style={{ flex: 1, paddingHorizontal: 20, paddingTop: 16 }}>
         <View style={styles.queueList}>
-          {mockQueue.map((p) => {
-            const done = vitalsDone.includes(p.token);
+          {vitalsQueuePatients.map((p) => {
             return (
               <TouchableOpacity
                 key={p.token}
-                style={[styles.queueItem, done && { opacity: 0.5 }]}
-                onPress={() => !done && handleSelectPatient(p)}
-                disabled={done}
+                style={styles.queueItem}
+                onPress={() => handleSelectPatient(p)}
               >
                 <View style={styles.queueToken}>
                   <Text style={styles.queueTokenText}>{p.token}</Text>
@@ -314,11 +416,7 @@ const VitalsDesk = () => {
                   <Text style={styles.queueName}>{p.name}</Text>
                   <Text style={styles.queueSub}>{p.id} • {p.gender} • {p.age} Yrs</Text>
                 </View>
-                {done ? (
-                  <View style={styles.doneBadge}><Text style={styles.doneBadgeText}>Done</Text></View>
-                ) : (
-                  <Ionicons name="chevron-forward" size={18} color="#999" />
-                )}
+                <Ionicons name="chevron-forward" size={18} color="#999" />
               </TouchableOpacity>
             );
           })}

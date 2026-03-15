@@ -22,20 +22,33 @@ const OPDStarted = () => {
 
   const today = new Date();
   const dateStr = `${today.getDate().toString().padStart(2, '0')}${(today.getMonth() + 1).toString().padStart(2, '0')}${today.getFullYear().toString().slice(-2)}`;
-  const opdId = `OPD-${village.toUpperCase().slice(0, 6)}-${dateStr}`;
+  const requestedOpdId = `OPD-${village.toUpperCase().slice(0, 6)}-${dateStr}`;
+  const [requestedPin] = useState(() => Math.floor(100000 + Math.random() * 900000).toString());
+  const [sessionOpdId, setSessionOpdId] = useState(requestedOpdId);
+  const [sessionPin, setSessionPin] = useState(requestedPin);
 
-  const [pin] = useState(() => Math.floor(100000 + Math.random() * 900000).toString());
-
-  // Save OPD session to Firestore when component mounts
+  // Create or reuse an active OPD session (backend is source of truth)
   useEffect(() => {
+    let mounted = true;
+
     opdService.start({
       village,
       deskRole,
-      opdId,
-      pin,
+      opdId: requestedOpdId,
+      pin: requestedPin,
       createdBy: user?.uid || '',
-    }).catch((err) => console.warn('Failed to save OPD session:', err));
-  }, []);
+    }).then((session) => {
+      if (!mounted) return;
+      setSessionOpdId(session.opdId || requestedOpdId);
+      setSessionPin(session.pin || requestedPin);
+    }).catch((err) => {
+      console.warn('Failed to start/reuse OPD session:', err);
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [deskRole, requestedOpdId, requestedPin, user?.uid, village]);
 
   const otherDesks = [
     { id: 'vitals', label: "Vital's Desk", icon: 'heart-pulse' as const, color: '#F97316' },
@@ -45,13 +58,17 @@ const OPDStarted = () => {
   ].filter((d) => d.id !== deskRole);
 
   const handleContinue = () => {
-    (navigation as any).navigate('RegistrationDesk', { village, deskRole, opdId, pin });
+    (navigation as any).navigate('RegistrationDesk', { village, deskRole, opdId: sessionOpdId, pin: sessionPin });
   };
 
   const navigateDesk = (id: string) => {
-    if (id === 'vitals') navigation.navigate('VitalsDesk' as never);
-    else if (id === 'doctor') navigation.navigate('DoctorAssistant' as never);
-    else if (id === 'medicine') navigation.navigate('MedicineCounter' as never);
+    if (id === 'vitals') {
+      (navigation as any).navigate('VitalsDesk', { pin: sessionPin, opdId: sessionOpdId });
+    } else if (id === 'doctor') {
+      (navigation as any).navigate('DoctorAssistant', { pin: sessionPin, opdId: sessionOpdId });
+    } else if (id === 'medicine') {
+      (navigation as any).navigate('MedicineCounter', { pin: sessionPin, opdId: sessionOpdId });
+    }
   };
 
   return (
@@ -63,7 +80,7 @@ const OPDStarted = () => {
         </TouchableOpacity>
         <View style={{ flex: 1, marginLeft: 12 }}>
           <Text style={[styles.headerTitle, { color: colors.text }]}>{deskLabels[deskRole] || t('Registration Desk')}</Text>
-          <Text style={[styles.headerSub, { color: colors.mutedText }]}>{opdId}</Text>
+          <Text style={[styles.headerSub, { color: colors.mutedText }]}>{sessionOpdId}</Text>
         </View>
         <TouchableOpacity>
           <Ionicons name="ellipsis-vertical" size={20} color="#999" />
@@ -79,7 +96,7 @@ const OPDStarted = () => {
           <View style={styles.pinSection}>
             <Text style={[styles.pinLabel, { color: colors.mutedText }]}>{t('6 Digit PIN')}</Text>
             <View style={styles.pinRow}>
-              {pin.split('').map((digit, i) => (
+              {sessionPin.split('').map((digit, i) => (
                 <Text key={i} style={styles.pinDigit}>{digit}</Text>
               ))}
             </View>
