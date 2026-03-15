@@ -4,8 +4,7 @@
  * =====================================================
  *
  * Centralized API client. All backend calls go through here.
- * When USE_BACKEND is false, methods return mock/demo data.
- * When USE_BACKEND is true, methods call your real API.
+ * Backend must be enabled for app features.
  *
  * To connect a real backend:
  *   1. Set USE_BACKEND = true in config.ts
@@ -14,28 +13,62 @@
  * =====================================================
  */
 
-import { USE_BACKEND, API_BASE_URL, API_KEYS, API_TIMEOUT, FIREBASE_CONFIG, DEMO_CREDENTIALS } from './config';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, sendPasswordResetEmail } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { auth, db } from './firebase';
+import { USE_BACKEND, API_BASE_URL, API_KEYS, API_TIMEOUT } from './config';
+import {
+  createUserWithEmailAndPassword,
+  deleteUser,
+  sendPasswordResetEmail,
+  signInWithEmailAndPassword,
+  signOut,
+} from 'firebase/auth';
+import { auth } from './firebase';
 
 // ─── Helper ──────────────────────────────────────────
 
+let authToken: string | null = null;
+
 const headers = () => ({
   'Content-Type': 'application/json',
-  ...(API_KEYS.apiKey !== 'YOUR_API_KEY' ? { Authorization: `Bearer ${API_KEYS.apiKey}` } : {}),
+  ...(authToken
+    ? { Authorization: `Bearer ${authToken}` }
+    : API_KEYS.apiKey !== 'YOUR_API_KEY'
+      ? { Authorization: `Bearer ${API_KEYS.apiKey}` }
+      : {}),
 });
 
-const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
+export const setAuthToken = (token: string | null) => {
+  authToken = token;
+};
+
+export const getAuthToken = () => authToken;
+
+const backendUnavailableMessage = () =>
+  `Unable to connect to backend at ${API_BASE_URL}. Make sure the backend server is running and reachable from this app.`;
+
+const fetchWithTimeout = async (url: string, options: RequestInit = {}): Promise<Response> => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), API_TIMEOUT);
 
-  const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+  } catch (err: any) {
+    if (err?.name === 'AbortError') {
+      throw new Error(`Request timed out after ${API_TIMEOUT}ms while contacting backend.`);
+    }
+    throw new Error(backendUnavailableMessage());
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
+const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
+  const res = await fetchWithTimeout(`${API_BASE_URL}${endpoint}`, {
     ...options,
     headers: { ...headers(), ...(options.headers as Record<string, string> || {}) },
-    signal: controller.signal,
   });
-  clearTimeout(timeout);
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -53,35 +86,130 @@ const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
   return text as unknown;
 };
 
+type BackendAuthUser = {
+  id: number;
+  full_name: string;
+  member_id: string;
+  email: string;
+  mobile?: string;
+  photo_url?: string;
+  role: 'doctor' | 'volunteer';
+};
+
+type BackendAuthLoginResponse = {
+  success: boolean;
+  access_token: string;
+  user: BackendAuthUser;
+};
+
+const exchangeFirebaseTokenForSession = async (idToken: string): Promise<BackendAuthLoginResponse> => {
+  return await apiFetch('/auth/firebase-login', {
+    method: 'POST',
+    body: JSON.stringify({ id_token: idToken }),
+  }) as BackendAuthLoginResponse;
+};
+
+const applyBackendSession = (result: BackendAuthLoginResponse) => {
+  setAuthToken(result.access_token);
+
+  const sessionUser = {
+    uid: String(result.user.id),
+    email: result.user.email,
+    displayName: result.user.full_name,
+  };
+
+  const mappedProfile = {
+    fullName: result.user.full_name,
+    memberId: result.user.member_id,
+    email: result.user.email,
+    mobile: result.user.mobile || '',
+    photoUri: result.user.photo_url || '',
+    role: result.user.role,
+  } as const;
+
+  const { setAuthSession } = require('./AuthContext');
+  setAuthSession(sessionUser, mappedProfile);
+
+  return sessionUser;
+};
+
 export const authService = {
   /**
-   * Login with email + password.
-   * Uses Firebase if properly configured, otherwise falls back to API.
+   * Login with Firebase email/password (email or member ID input), then create backend session.
    */
-  login: async (email: string, password: string) => {
-    const hasValidFirebaseConfig = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_FIREBASE_API_KEY';
+  login: async (identifier: string, password: string) => {
+    if (USE_BACKEND) {
+      const normalizedIdentifier = identifier.trim();
+      let normalizedEmail = normalizedIdentifier.toLowerCase();
 
-    if (hasValidFirebaseConfig && USE_BACKEND) {
-      // Use Firebase auth
-      const userCred = await signInWithEmailAndPassword(auth, email, password);
-      return {
-        success: true,
-        user: { id: userCred.user.uid, name: 'User', email: userCred.user.email },
-      };
+      if (!normalizedIdentifier.includes('@')) {
+        const resolved = await apiFetch('/auth/resolve-login-identifier', {
+          method: 'POST',
+          body: JSON.stringify({ identifier: normalizedIdentifier }),
+        }) as {
+          success: boolean;
+          email: string;
+        };
+
+        normalizedEmail = String(resolved.email || '').trim().toLowerCase();
+      }
+
+      if (!normalizedEmail || !normalizedEmail.includes('@')) {
+        throw new Error('Invalid login identifier. Use your email or member ID.');
+      }
+
+      const firebaseCredential = await signInWithEmailAndPassword(auth, normalizedEmail, password);
+      const idToken = await firebaseCredential.user.getIdToken();
+
+      try {
+        const result = await exchangeFirebaseTokenForSession(idToken);
+        const sessionUser = applyBackendSession(result);
+
+        return {
+          success: true,
+          user: {
+            id: sessionUser.uid,
+            name: sessionUser.displayName,
+            email: sessionUser.email,
+          },
+        };
+      } catch (err) {
+        await signOut(auth).catch(() => {});
+        throw err;
+      }
     }
 
-    // Demo mode
-    if (email === DEMO_CREDENTIALS.email && password === DEMO_CREDENTIALS.password) {
-      return {
-        success: true,
-        user: { id: DEMO_CREDENTIALS.doctorId, name: DEMO_CREDENTIALS.doctorName, email },
-      };
-    }
-    throw new Error('Invalid credentials');
+    throw new Error('Backend is disabled. Enable backend to login.');
   },
 
   /**
-   * Register a new account (doctor or volunteer).
+   * Restore backend session from an already-authenticated Firebase user.
+   */
+  resumeSession: async () => {
+    if (!USE_BACKEND) {
+      throw new Error('Backend is disabled. Enable backend to restore session.');
+    }
+
+    if (!auth.currentUser) {
+      throw new Error('No active Firebase session found.');
+    }
+
+    const idToken = await auth.currentUser.getIdToken();
+    const result = await exchangeFirebaseTokenForSession(idToken);
+    const sessionUser = applyBackendSession(result);
+
+    return {
+      success: true,
+      user: {
+        id: sessionUser.uid,
+        name: sessionUser.displayName,
+        email: sessionUser.email,
+      },
+    };
+  },
+
+  /**
+   * Register Firebase credentials first, then save profile in Postgres.
    */
   register: async (
     email: string,
@@ -92,125 +220,111 @@ export const authService = {
     photoUri?: string | null,
     role: 'doctor' | 'volunteer' = 'doctor',
   ) => {
-    const hasValidFirebaseConfig = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_FIREBASE_API_KEY';
+    if (USE_BACKEND) {
+      const normalizedEmail = email.trim().toLowerCase();
+      const firebaseCredential = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
 
-    if (hasValidFirebaseConfig && USE_BACKEND) {
-      // Suppress auth listener so dashboard doesn't flash
-      const { setRegistering } = require('./AuthContext');
-      setRegistering(true);
       try {
-        const userCred = await createUserWithEmailAndPassword(auth, email, password);
-        await updateProfile(userCred.user, {
-          displayName: fullName,
-          ...(photoUri ? { photoURL: photoUri } : {}),
-        });
-        await setDoc(doc(db, 'users', userCred.user.uid), {
-          fullName,
-          memberId,
-          email,
-          mobile,
-          photoUri: photoUri || '',
-          role,
-          createdAt: new Date().toISOString(),
-        });
-        // Sign out so the user is redirected to Login instead of auto-entering dashboard
-        await auth.signOut();
-      } finally {
-        setRegistering(false);
+        const result = await apiFetch('/auth/register', {
+          method: 'POST',
+          body: JSON.stringify({
+            full_name: fullName,
+            member_id: memberId,
+            email: normalizedEmail,
+            mobile,
+            password,
+            role,
+            photo_url: photoUri || null,
+          }),
+        }) as {
+          success: boolean;
+          user: {
+            id: number;
+            full_name: string;
+            member_id: string;
+            email: string;
+            mobile?: string;
+            photo_url?: string;
+            role: 'doctor' | 'volunteer';
+          };
+        };
+
+        await signOut(auth).catch(() => {});
+        setAuthToken(null);
+        const { clearAuthSession } = require('./AuthContext');
+        clearAuthSession();
+
+        return {
+          success: result.success,
+          user: {
+            id: String(result.user.id),
+            name: result.user.full_name,
+            email: result.user.email,
+            memberId: result.user.member_id,
+            mobile: result.user.mobile || '',
+            photoUri: result.user.photo_url || '',
+            role: result.user.role,
+          },
+        };
+      } catch (err) {
+        try {
+          if (auth.currentUser?.uid === firebaseCredential.user.uid) {
+            await deleteUser(firebaseCredential.user);
+          }
+        } catch {
+        }
+        await signOut(auth).catch(() => {});
+        throw err;
       }
-      return {
-        success: true,
-        user: { id: '', name: fullName, email, memberId, mobile, photoUri: photoUri || '', role },
-      };
     }
 
-    throw new Error('Registration requires Firebase backend');
+    throw new Error('Registration is available only when backend is enabled');
   },
 
   /**
-   * Get user profile from Firestore (checks 'users' collection, falls back to 'doctors').
+   * Get current user profile from backend.
    */
-  getUserProfile: async (uid: string) => {
-    const hasValidFirebaseConfig = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_FIREBASE_API_KEY';
-
-    if (hasValidFirebaseConfig && USE_BACKEND) {
-      const currentAuthUser = auth.currentUser;
-      // Check 'users' collection first
-      const userSnap = await getDoc(doc(db, 'users', uid));
-      if (userSnap.exists()) {
-        const data = userSnap.data();
-        return {
-          fullName: data.fullName || currentAuthUser?.displayName || '',
-          memberId: data.memberId || data.doctorId || '',
-          email: data.email || currentAuthUser?.email || '',
-          mobile: data.mobile || '',
-          photoUri: data.photoUri || data.photoURL || currentAuthUser?.photoURL || '',
-          role: data.role || 'doctor',
-        } as { fullName: string; memberId: string; email: string; mobile?: string; photoUri?: string; role: 'doctor' | 'volunteer' };
-      }
-      // Fallback: check legacy 'doctors' collection
-      const docSnap = await getDoc(doc(db, 'doctors', uid));
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        return {
-          fullName: data.fullName || currentAuthUser?.displayName || '',
-          memberId: data.doctorId || data.memberId || '',
-          email: data.email || currentAuthUser?.email || '',
-          mobile: data.mobile || '',
-          photoUri: data.photoUri || currentAuthUser?.photoURL || '',
-          role: 'doctor' as const,
-        };
-      }
+  getUserProfile: async (_uid: string) => {
+    if (!USE_BACKEND || !authToken) {
+      return null;
     }
-    return null;
+
+    const data = await apiFetch('/users/me') as {
+      id: number;
+      full_name: string;
+      member_id: string;
+      email: string;
+      mobile?: string;
+      photo_url?: string;
+      role: 'doctor' | 'volunteer';
+    };
+
+    return {
+      fullName: data.full_name,
+      memberId: data.member_id,
+      email: data.email,
+      mobile: data.mobile || '',
+      photoUri: data.photo_url || '',
+      role: data.role,
+    } as { fullName: string; memberId: string; email: string; mobile?: string; photoUri?: string; role: 'doctor' | 'volunteer' };
   },
 
   /**
-   * Update user profile fields in Firestore.
+   * Update current user profile fields in backend.
    */
-  updateUserProfile: async (uid: string, updates: { fullName?: string; mobile?: string; photoUri?: string }) => {
-    const hasValidFirebaseConfig = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_FIREBASE_API_KEY';
-
-    if (hasValidFirebaseConfig && USE_BACKEND) {
-      const usersRef = doc(db, 'users', uid);
-      const doctorsRef = doc(db, 'doctors', uid);
-      const [usersSnap, doctorsSnap] = await Promise.all([getDoc(usersRef), getDoc(doctorsRef)]);
-
-      const baseData = usersSnap.exists()
-        ? usersSnap.data()
-        : doctorsSnap.exists()
-          ? doctorsSnap.data()
-          : {};
-
-      const authUser = auth.currentUser;
-      const normalizedUserPayload = {
-        fullName: updates.fullName ?? baseData.fullName ?? authUser?.displayName ?? '',
-        memberId: baseData.memberId || baseData.doctorId || '',
-        email: baseData.email || authUser?.email || '',
-        mobile: updates.mobile ?? baseData.mobile ?? '',
-        photoUri: updates.photoUri ?? baseData.photoUri ?? baseData.photoURL ?? authUser?.photoURL ?? '',
-        role: baseData.role || 'doctor',
-        updatedAt: new Date().toISOString(),
-      };
-
-      const writes: Array<Promise<unknown>> = [
-        setDoc(usersRef, normalizedUserPayload, { merge: true }),
-      ];
-
-      if (doctorsSnap.exists()) {
-        const doctorUpdates: Record<string, string> = {
-          updatedAt: new Date().toISOString(),
-        };
-        if (typeof updates.fullName === 'string') doctorUpdates.fullName = updates.fullName;
-        if (typeof updates.mobile === 'string') doctorUpdates.mobile = updates.mobile;
-        if (typeof updates.photoUri === 'string') doctorUpdates.photoUri = updates.photoUri;
-
-        writes.push(setDoc(doctorsRef, doctorUpdates, { merge: true }));
-      }
-
-      await Promise.all(writes);
-      return { success: true };
+  updateUserProfile: async (_uid: string, updates: { fullName?: string; mobile?: string; photoUri?: string }) => {
+    if (!USE_BACKEND || !authToken) {
+      throw new Error('Please login again to update profile.');
     }
+
+    await apiFetch('/users/me', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        ...(typeof updates.fullName === 'string' ? { full_name: updates.fullName } : {}),
+        ...(typeof updates.mobile === 'string' ? { mobile: updates.mobile } : {}),
+        ...(typeof updates.photoUri === 'string' ? { photo_url: updates.photoUri } : {}),
+      }),
+    });
 
     return { success: true };
   },
@@ -226,29 +340,22 @@ export const authService = {
    * Send password reset email.
    */
   forgotPassword: async (email: string) => {
-    const hasValidFirebaseConfig = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_FIREBASE_API_KEY';
-
-    if (hasValidFirebaseConfig && USE_BACKEND) {
-      // Use Firebase
-      await sendPasswordResetEmail(auth, email);
-      return { success: true, message: 'Reset link sent to email' };
+    if (USE_BACKEND) {
+      await sendPasswordResetEmail(auth, email.trim().toLowerCase());
+      return { success: true };
     }
 
-    // Demo mode
-    return { success: true, message: 'Reset link sent (demo)' };
+    throw new Error('Backend is disabled. Enable backend to reset password.');
   },
 
   /**
    * Logout current user.
    */
   logout: async () => {
-    const hasValidFirebaseConfig = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_FIREBASE_API_KEY';
-
-    if (hasValidFirebaseConfig && USE_BACKEND) {
-      await auth.signOut();
-      return { success: true };
-    }
-
+    await signOut(auth).catch(() => {});
+    setAuthToken(null);
+    const { clearAuthSession } = require('./AuthContext');
+    clearAuthSession();
     return { success: true };
   },
 };
@@ -272,7 +379,7 @@ export type PatientApiData = {
 
 export const patientService = {
   /**
-   * Create a new patient.
+   * Create a new patient, or reuse an existing patient when backend detects duplicate.
    * POST /patients
    */
   create: async (data: {
@@ -285,9 +392,10 @@ export const patientService = {
     photo_url?: string;
     created_by?: number;
     updated_by?: number;
-  }): Promise<PatientApiData> => {
-    return apiFetch('/patients', {
+  }): Promise<{ patient: PatientApiData; reusedExisting: boolean }> => {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/patients`, {
       method: 'POST',
+      headers: headers(),
       body: JSON.stringify({
         full_name: data.full_name,
         gender: data.gender,
@@ -300,6 +408,17 @@ export const patientService = {
         updated_by: data.updated_by || 1,
       }),
     });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || body.message || `API error: ${res.status}`);
+    }
+
+    const patient = await res.json() as PatientApiData;
+    return {
+      patient,
+      reusedExisting: res.status === 200,
+    };
   },
 
   /**
@@ -334,14 +453,10 @@ export const patientService = {
    * DELETE /patients/{patient_id}
    */
   delete: async (patientId: number): Promise<void> => {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), API_TIMEOUT);
-    const res = await fetch(`${API_BASE_URL}/patients/${patientId}`, {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/patients/${patientId}`, {
       method: 'DELETE',
       headers: headers(),
-      signal: controller.signal,
     });
-    clearTimeout(timeout);
     if (!res.ok && res.status !== 204) {
       const body = await res.json().catch(() => ({}));
       throw new Error(body.detail || `API error: ${res.status}`);
@@ -359,30 +474,38 @@ export const patientService = {
 
 // ─── OPD ─────────────────────────────────────────────
 
+export type QueueStatus = 'waiting_vitals' | 'waiting_doctor' | 'consult_done' | 'completed';
+
 export const opdService = {
   /**
-   * Start a new OPD session and save to Firestore.
+   * Start a new OPD session.
    * Returns the opdId and 6-digit pin.
    */
   start: async (data: { village: string; deskRole: string; opdId: string; pin: string; createdBy?: string }) => {
-    const hasValidFirebaseConfig = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_FIREBASE_API_KEY';
+    if (USE_BACKEND) {
+      const result = await apiFetch('/opd/sessions', {
+        method: 'POST',
+        body: JSON.stringify({
+          opd_id: data.opdId,
+          pin: data.pin,
+          village: data.village,
+          desk_role: data.deskRole,
+          created_by: data.createdBy || null,
+        }),
+      }) as {
+        success: boolean;
+        opd_id: string;
+        pin: string;
+      };
 
-    if (hasValidFirebaseConfig && USE_BACKEND) {
-      await setDoc(doc(db, 'opd_sessions', data.pin), {
-        opdId: data.opdId,
-        pin: data.pin,
-        village: data.village,
-        deskRole: data.deskRole,
-        status: 'active',
-        patients: [],
-        createdBy: data.createdBy || '',
-        createdAt: new Date().toISOString(),
-      });
-      return { success: true, opdId: data.opdId, pin: data.pin };
+      return {
+        success: result.success,
+        opdId: result.opd_id,
+        pin: result.pin,
+      };
     }
 
-    // Demo mode
-    return { success: true, opdId: data.opdId, pin: data.pin };
+    throw new Error('Backend is disabled. Enable backend to start OPD session.');
   },
 
   /**
@@ -390,55 +513,113 @@ export const opdService = {
    * Returns the OPD session data if found.
    */
   joinByPin: async (pin: string) => {
-    const hasValidFirebaseConfig = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_FIREBASE_API_KEY';
+    if (USE_BACKEND) {
+      try {
+        const result = await apiFetch(`/opd/sessions/${encodeURIComponent(pin)}`) as {
+          opd_id: string;
+          pin: string;
+          village: string;
+          desk_role: string;
+          status: string;
+          patients: Array<{
+            id: string;
+            name: string;
+            gender: string;
+            age: number;
+            token: number;
+            queue_status?: QueueStatus;
+            complaints?: string[];
+            registration_notes?: string | null;
+          }>;
+          created_at: string;
+        };
 
-    if (hasValidFirebaseConfig && USE_BACKEND) {
-      const snap = await getDoc(doc(db, 'opd_sessions', pin));
-      if (snap.exists()) {
-        return snap.data() as {
+        return {
+          opdId: result.opd_id,
+          pin: result.pin,
+          village: result.village,
+          deskRole: result.desk_role,
+          status: result.status,
+          patients: (result.patients || []).map((patient) => ({
+            id: patient.id,
+            name: patient.name,
+            gender: patient.gender,
+            age: patient.age,
+            token: patient.token,
+            queueStatus: patient.queue_status || 'waiting_vitals',
+            complaints: Array.isArray(patient.complaints) ? patient.complaints : [],
+            registrationNotes: patient.registration_notes || '',
+          })),
+          createdAt: result.created_at,
+        } as {
           opdId: string;
           pin: string;
           village: string;
           deskRole: string;
           status: string;
-          patients: Array<{ id: string; name: string; gender: string; age: number; token: number }>;
+          patients: Array<{
+            id: string;
+            name: string;
+            gender: string;
+            age: number;
+            token: number;
+            queueStatus?: QueueStatus;
+            complaints?: string[];
+            registrationNotes?: string;
+          }>;
           createdAt: string;
         };
+      } catch (err: any) {
+        const msg = String(err?.message || '').toLowerCase();
+        if (msg.includes('404') || msg.includes('not found')) {
+          return null;
+        }
+        throw err;
       }
-      return null;
     }
 
-    // Demo mode — return mock data
-    return {
-      opdId: `OPD-RAMAGRI-250622`,
-      pin,
-      village: 'Ramagri',
-      deskRole: 'registration',
-      status: 'active',
-      patients: [
-        { id: 'P1234', name: 'Dharamshinhbhai Prajapati', gender: 'Male', age: 58, token: 1 },
-        { id: 'P1235', name: 'Manguben Solanki', gender: 'Male', age: 58, token: 2 },
-        { id: 'P1236', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 3 },
-        { id: 'P1237', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 4 },
-        { id: 'P1238', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 5 },
-      ],
-      createdAt: new Date().toISOString(),
-    };
+    throw new Error('Backend is disabled. Enable backend to join OPD session.');
   },
 
   /**
-   * Add a patient to an OPD session in Firestore.
+   * Add a patient to an OPD session.
    */
-  addPatientToSession: async (pin: string, patient: { id: string; name: string; gender: string; age: number; token: number }) => {
-    const hasValidFirebaseConfig = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_FIREBASE_API_KEY';
-
-    if (hasValidFirebaseConfig && USE_BACKEND) {
-      const { arrayUnion, updateDoc } = require('firebase/firestore');
-      await updateDoc(doc(db, 'opd_sessions', pin), {
-        patients: arrayUnion(patient),
+  addPatientToSession: async (pin: string, patient: {
+    id: string;
+    name: string;
+    gender: string;
+    age: number;
+    token: number;
+    complaints?: string[];
+    registrationNotes?: string;
+  }) => {
+    if (USE_BACKEND) {
+      await apiFetch(`/opd/sessions/${encodeURIComponent(pin)}/patients`, {
+        method: 'POST',
+        body: JSON.stringify({
+          id: patient.id,
+          name: patient.name,
+          gender: patient.gender,
+          age: patient.age,
+          token: patient.token,
+          complaints: patient.complaints || [],
+          registration_notes: patient.registrationNotes || null,
+        }),
       });
+      return { success: true };
     }
-    return { success: true };
+    throw new Error('Backend is disabled. Enable backend to add patient to OPD session.');
+  },
+
+  updatePatientQueueStatus: async (pin: string, token: number, status: QueueStatus) => {
+    if (USE_BACKEND) {
+      await apiFetch(`/opd/sessions/${encodeURIComponent(pin)}/patients/${token}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      });
+      return { success: true };
+    }
+    throw new Error('Backend is disabled. Enable backend to update patient queue status.');
   },
 
   /**
@@ -446,7 +627,7 @@ export const opdService = {
    */
   getStats: async () => {
     if (!USE_BACKEND) {
-      return { totalOPDs: 12, vitalsRecorded: 24, consultsDone: 18, medicinesGiven: 15 };
+      throw new Error('Backend is disabled. Enable backend to load OPD stats.');
     }
     return apiFetch('/opd/stats');
   },
@@ -456,7 +637,7 @@ export const opdService = {
 
 export const clinicalService = {
   recordVitals: async (patientId: string, vitals: Record<string, any>) => {
-    if (!USE_BACKEND) return { success: true };
+    if (!USE_BACKEND) throw new Error('Backend is disabled. Enable backend to record vitals.');
     return apiFetch(`/patients/${encodeURIComponent(patientId)}/vitals`, {
       method: 'POST',
       body: JSON.stringify(vitals),
@@ -464,7 +645,7 @@ export const clinicalService = {
   },
 
   recordConsult: async (patientId: string, data: Record<string, any>) => {
-    if (!USE_BACKEND) return { success: true };
+    if (!USE_BACKEND) throw new Error('Backend is disabled. Enable backend to record consult.');
     return apiFetch(`/patients/${encodeURIComponent(patientId)}/consult`, {
       method: 'POST',
       body: JSON.stringify(data),
@@ -472,10 +653,15 @@ export const clinicalService = {
   },
 
   dispenseMedicine: async (patientId: string, medicines: any[]) => {
-    if (!USE_BACKEND) return { success: true };
+    if (!USE_BACKEND) throw new Error('Backend is disabled. Enable backend to dispense medicines.');
     return apiFetch(`/patients/${encodeURIComponent(patientId)}/medicines`, {
       method: 'POST',
       body: JSON.stringify({ medicines }),
     });
+  },
+
+  getPatientHistory: async (patientId: string) => {
+    if (!USE_BACKEND) throw new Error('Backend is disabled. Enable backend to load patient history.');
+    return apiFetch(`/patients/${encodeURIComponent(patientId)}/history`);
   },
 };

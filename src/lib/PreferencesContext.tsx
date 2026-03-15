@@ -1,8 +1,5 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { useAuth } from './AuthContext';
-import { db } from './firebase';
-import { FIREBASE_CONFIG, USE_BACKEND } from './config';
 
 export type AppLanguage = 'en' | 'gu';
 export type AppTheme = 'light' | 'dark';
@@ -506,35 +503,6 @@ export const PreferencesProvider = ({ children }: { children: React.ReactNode })
     ? (userPreferences[currentUserId] || rolePreferences[currentRole])
     : rolePreferences[currentRole];
 
-  const hasValidFirebaseConfig = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_FIREBASE_API_KEY';
-
-  useEffect(() => {
-    const loadUserPreferences = async () => {
-      if (!currentUserId || !hasValidFirebaseConfig || !USE_BACKEND) return;
-      if (userPreferences[currentUserId]) return;
-
-      try {
-        const snap = await getDoc(doc(db, 'users', currentUserId));
-        if (!snap.exists()) return;
-
-        const rawPrefs = (snap.data() as any)?.preferences;
-        if (!rawPrefs) return;
-
-        const loadedLanguage = isValidLanguage(rawPrefs.language) ? rawPrefs.language : rolePreferences[currentRole].language;
-        const loadedTheme = isValidTheme(rawPrefs.theme) ? rawPrefs.theme : rolePreferences[currentRole].theme;
-
-        setUserPreferences((prev) => ({
-          ...prev,
-          [currentUserId]: { language: loadedLanguage, theme: loadedTheme },
-        }));
-      } catch (err) {
-        console.warn('Failed to load user preferences:', err);
-      }
-    };
-
-    loadUserPreferences();
-  }, [currentUserId, currentRole, hasValidFirebaseConfig, userPreferences, rolePreferences]);
-
   const updatePreferences = useCallback((patch: Partial<UserPreferences>) => {
     const nextPreferences: UserPreferences = {
       language: patch.language || currentPreferences.language,
@@ -546,11 +514,6 @@ export const PreferencesProvider = ({ children }: { children: React.ReactNode })
         ...prev,
         [currentUserId]: nextPreferences,
       }));
-
-      if (hasValidFirebaseConfig && USE_BACKEND) {
-        setDoc(doc(db, 'users', currentUserId), { preferences: nextPreferences }, { merge: true })
-          .catch((err) => console.warn('Failed to save user preferences:', err));
-      }
       return;
     }
 
@@ -558,7 +521,7 @@ export const PreferencesProvider = ({ children }: { children: React.ReactNode })
       ...prev,
       [currentRole]: nextPreferences,
     }));
-  }, [currentPreferences, currentRole, currentUserId, hasValidFirebaseConfig]);
+  }, [currentPreferences, currentRole, currentUserId]);
 
   const setLanguage = useCallback((value: AppLanguage) => updatePreferences({ language: value }), [updatePreferences]);
   const setTheme = useCallback((value: AppTheme) => updatePreferences({ theme: value }), [updatePreferences]);

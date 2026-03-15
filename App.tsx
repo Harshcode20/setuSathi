@@ -34,7 +34,7 @@ import SettingsScreen from './src/pages/Settings';
 
 const Stack = createStackNavigator();
 
-/** Auth-aware navigator: Firebase auth state drives which screens are shown */
+/** Auth-aware navigator: session/profile state drives which screens are shown */
 function RootNavigator() {
   const { user, loading, userProfile } = useAuth();
 

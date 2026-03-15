@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth } from './firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 import { authService } from './api';
 import { FORCE_LOGIN_ON_APP_START } from './config';
+import { auth } from './firebase';
 
 type UserProfile = {
   fullName: string;
@@ -13,8 +13,14 @@ type UserProfile = {
   role: 'doctor' | 'volunteer';
 };
 
+type AppUser = {
+  uid: string;
+  email?: string | null;
+  displayName?: string | null;
+};
+
 type AuthContextType = {
-  user: User | null;
+  user: AppUser | null;
   loading: boolean;
   userProfile: UserProfile | null;
   refreshUserProfile: () => Promise<void>;
@@ -26,22 +32,35 @@ const AuthContext = createContext<AuthContextType>({ user: null, loading: true, 
 
 export const useAuth = () => useContext(AuthContext);
 
-// Flag to suppress auth listener during registration
-let _isRegistering = false;
-export const setRegistering = (v: boolean) => { _isRegistering = v; };
+let setUserStateRef: ((user: AppUser | null) => void) | null = null;
+let setUserProfileStateRef: ((profile: UserProfile | null) => void) | null = null;
+
+export const setAuthSession = (user: AppUser | null, profile?: UserProfile | null) => {
+  if (setUserStateRef) {
+    setUserStateRef(user);
+  }
+
+  if (profile !== undefined && setUserProfileStateRef) {
+    setUserProfileStateRef(profile);
+  }
+};
+
+export const clearAuthSession = () => {
+  setAuthSession(null, null);
+};
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
   const refreshUserProfile = async () => {
-    if (!auth.currentUser) {
+    if (!user?.uid) {
       setUserProfile(null);
       return;
     }
     try {
-      const profile = await authService.getUserProfile(auth.currentUser.uid);
+      const profile = await authService.getUserProfile(user.uid);
       setUserProfile(profile);
     } catch (err) {
       console.warn('Failed to refresh user profile:', err);
@@ -49,40 +68,61 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   useEffect(() => {
-    let unsubscribe: (() => void) | undefined;
+    let mounted = true;
+    let unsubscribe: (() => void) | null = null;
 
     const initAuth = async () => {
+      setUserStateRef = setUser;
+      setUserProfileStateRef = setUserProfile;
+
       if (FORCE_LOGIN_ON_APP_START) {
         try {
-          await auth.signOut();
+          await authService.logout();
         } catch (err) {
           console.warn('Failed to clear persisted auth session:', err);
         }
+
+        if (mounted) {
+          setLoading(false);
+        }
+        return;
       }
 
       unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-        // Skip auth state changes while registration is in progress
-        if (_isRegistering) return;
-        setUser(firebaseUser);
-        if (firebaseUser) {
-          try {
-            const profile = await authService.getUserProfile(firebaseUser.uid);
-            setUserProfile(profile);
-          } catch (err) {
-            console.warn('Failed to fetch user profile:', err);
-            setUserProfile(null);
-          }
-        } else {
+        if (!mounted) return;
+
+        if (!firebaseUser) {
+          setUser(null);
           setUserProfile(null);
+          setLoading(false);
+          return;
         }
-        setLoading(false);
+
+        try {
+          await authService.resumeSession();
+        } catch (err) {
+          console.warn('Failed to restore auth session:', err);
+          try {
+            await authService.logout();
+          } catch {
+          }
+        } finally {
+          if (mounted) {
+            setLoading(false);
+          }
+        }
       });
     };
 
     initAuth();
 
     return () => {
-      if (unsubscribe) unsubscribe();
+      mounted = false;
+      if (unsubscribe) {
+        unsubscribe();
+      }
+      setUserStateRef = null;
+      setUserProfileStateRef = null;
     };
   }, []);
 

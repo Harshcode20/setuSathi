@@ -5,12 +5,11 @@ import { Ionicons } from '@expo/vector-icons';
 
 const logoImg = require('../assets/setusaathi-logo.png');
 
-import { DEMO_CREDENTIALS } from '../lib/config';
 import { authService } from '../lib/api';
 import { usePreferences } from '../lib/PreferencesContext';
 
 const LoginScreen = () => {
-  const [memberId, setMemberId] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
@@ -22,20 +21,18 @@ const LoginScreen = () => {
   const { t, colors } = usePreferences();
 
   const handleLogin = async () => {
-    if (!memberId.trim() || !password.trim()) {
-      Alert.alert(t('Error'), t('Please enter your email and password.'));
+    if (!identifier.trim() || !password.trim()) {
+      Alert.alert(t('Error'), t('Please enter your email/member ID and password.'));
       return;
     }
     setLoading(true);
     try {
-      // Just sign in with Firebase — onAuthStateChanged in AuthProvider
-      // will automatically fetch the user profile (with role) and
-      // App.tsx's RootNavigator will switch to the correct dashboard.
-      await authService.login(memberId.trim(), password);
+      // Firebase verifies credentials; backend session/profile are created from the verified token.
+      await authService.login(identifier.trim(), password);
       setLoading(false);
     } catch {
       setLoading(false);
-      Alert.alert(t('Login Failed'), `${t('Invalid credentials.')}\n\n${t('Demo')}: ${DEMO_CREDENTIALS.email} / ${DEMO_CREDENTIALS.password}`);
+      Alert.alert(t('Login Failed'), t('Invalid credentials.'));
     }
   };
 
@@ -65,7 +62,7 @@ const LoginScreen = () => {
 
         <View style={[styles.inputWrapper, { backgroundColor: colors.subSurface, borderColor: colors.border }]}>
           <Ionicons name="person-outline" size={20} color="#888" style={styles.inputIcon} />
-          <TextInput style={[styles.input, { color: colors.text }]} placeholder={t('Member ID')} placeholderTextColor={colors.mutedText} value={memberId} onChangeText={setMemberId} autoCapitalize="none" keyboardType="email-address" />
+          <TextInput style={[styles.input, { color: colors.text }]} placeholder={t('Email or Member ID')} placeholderTextColor={colors.mutedText} value={identifier} onChangeText={setIdentifier} autoCapitalize="none" />
         </View>
 
         <View style={[styles.inputWrapper, { backgroundColor: colors.subSurface, borderColor: colors.border }]}>
@@ -98,9 +95,6 @@ const LoginScreen = () => {
             </>
           )}
         </TouchableOpacity>
-
-        <Text style={[styles.demoHint, { color: colors.mutedText }]}>{t('Demo')}: {DEMO_CREDENTIALS.email} / {DEMO_CREDENTIALS.password}</Text>
-
         <View style={styles.registerRow}>
           <Text style={[styles.registerRowText, { color: colors.mutedText }]}>{t("Don't have an account?")} </Text>
           <TouchableOpacity onPress={() => navigation.navigate('Register' as never)}>
@@ -178,7 +172,6 @@ const styles = StyleSheet.create({
   forgotText: { fontSize: 14, color: '#2563EB', fontWeight: '600' },
   loginBtn: { width: '100%', backgroundColor: '#2563EB', paddingVertical: 18, borderRadius: 18, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', marginBottom: 12 },
   loginBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  demoHint: { fontSize: 12, color: '#aaa', marginBottom: 12 },
   contactText: { fontSize: 14, color: '#888', marginTop: 8 },
   link: { color: '#2563EB', fontWeight: 'bold' },
   registerRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },

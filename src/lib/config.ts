@@ -7,20 +7,18 @@
  * connections. When adding a backend, fill in the relevant
  * section below and set USE_BACKEND = true.
  *
- * The app currently runs in DEMO mode (no backend needed).
- * To switch to a real backend, update the values below.
+ * The app is configured for backend-first usage.
  * =====================================================
  */
 
 // ─── Master Switch ───────────────────────────────────
 // Set to true when a real backend is connected.
-// When false, the app uses demo/mock data everywhere.
 export const USE_BACKEND = true;
 
 // ─── Auth Session Behavior ──────────────────────────
 // When true, app signs out any persisted Firebase session on startup
 // so users always land on Login first.
-export const FORCE_LOGIN_ON_APP_START = true;
+export const FORCE_LOGIN_ON_APP_START = false;
 
 // ─── API Server ──────────────────────────────────────
 // Base URL for your REST / GraphQL backend
@@ -86,11 +84,3 @@ export const SMS_CONFIG = {
   msg91TemplateId: 'YOUR_TEMPLATE_ID',
 };
 
-// ─── Demo / Mock Data ────────────────────────────────
-// Credentials for demo login when USE_BACKEND = false
-export const DEMO_CREDENTIALS = {
-  email: 'admin@setusathi.com',
-  password: 'admin123',
-  doctorName: 'Dalpatbhai Dave',
-  doctorId: 'S1234',
-};

@@ -1,48 +1,70 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { opdService, QueueStatus } from '../lib/api';
 import { usePreferences } from '../lib/PreferencesContext';
 
-const mockQueue = [
-  { id: 'P1234', name: 'Dharamshinhbhai Prajapati', gender: 'Male', age: 58, token: 1 },
-  { id: 'P1235', name: 'Manguben Solanki', gender: 'Female', age: 58, token: 2 },
-  { id: 'P1236', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 3 },
-  { id: 'P1237', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 4 },
-  { id: 'P1238', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 5 },
-  { id: 'P1239', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 6 },
-];
+type PrescribedMedicine = {
+  id: string;
+  name: string;
+  dosage: string;
+  days: string;
+};
 
-const mockComplaints = ['1.1 શરીરનો દુઃખાવો', '2.1 તાવ', '3.1 ખંજવાળ', '4.1 ચક્કર'];
-const mockVitals = { temp: '98.2', pulse: '86', bpUpper: '140', bpLower: '120', spo2: '99', bloodSugar: '120' };
-const mockMedicines = [
-  { id: '6.2', name: 'T. Citra', dosage: '1-0-1', days: '3' },
-  { id: '6.7', name: 'T. Cip Z', dosage: '0-1-0', days: '3' },
-  { id: '6.9', name: 'T. Losartan', dosage: '1-0-1', days: '3' },
-  { id: '6.13', name: 'Calcium Tab', dosage: '1-0-1', days: '3' },
-];
-const mockDoctorNotes = ['Take tablet T. Para only if fever goes above 99°F.', 'Revisit after 3 days'];
+type QueuePatient = {
+  id: string;
+  name: string;
+  gender: string;
+  age: number;
+  token: number;
+  queueStatus?: QueueStatus;
+  complaints?: string[];
+  vitals?: {
+    temp?: string;
+    pulse?: string;
+    bpUpper?: string;
+    bpLower?: string;
+    spo2?: string;
+    bloodSugar?: string;
+  };
+  allergies?: string;
+  registrationNotes?: string;
+  vitalsNotes?: string;
+  medicines?: PrescribedMedicine[];
+  doctorNotes?: string[];
+};
 
 type ViewState = 'pin' | 'queue' | 'prescription';
 
 const MedicineCounter = () => {
   const navigation = useNavigation();
+  const route = useRoute();
   const { t, colors } = usePreferences();
   const pinRefs = useRef<Array<TextInput | null>>([]);
+  const presetPin = typeof (route.params as any)?.pin === 'string' ? (route.params as any).pin : '';
+  const presetOpdId = typeof (route.params as any)?.opdId === 'string' ? (route.params as any).opdId : '';
+  const defaultPin = presetPin.length === 6 ? presetPin.split('') : ['', '', '', '', '', ''];
 
   const [view, setView] = useState<ViewState>('pin');
-  const [pin, setPin] = useState(['', '', '', '', '', '']);
-  const [givenDone, setGivenDone] = useState<number[]>([]);
-  const [activePatient, setActivePatient] = useState<typeof mockQueue[0] | null>(null);
+  const [pin, setPin] = useState<string[]>(defaultPin);
+  const [activePatient, setActivePatient] = useState<QueuePatient | null>(null);
+  const [queuePatients, setQueuePatients] = useState<QueuePatient[]>([]);
+  const [sessionPin, setSessionPin] = useState<string>(presetPin);
+  const [opdId, setOpdId] = useState<string>(presetOpdId);
+  const [joining, setJoining] = useState(false);
 
   const [complaintsOpen, setComplaintsOpen] = useState(true);
   const [vitalsOpen, setVitalsOpen] = useState(false);
   const [checkedMeds, setCheckedMeds] = useState<Set<string>>(new Set());
 
-  const opdId = 'OPD-RAMAGRI-250622';
-  const totalCases = mockQueue.length;
-  const completed = givenDone.length;
-  const inQueue = totalCases - completed;
+  const medicineQueuePatients = queuePatients.filter((patient) => {
+    const status = patient.queueStatus || 'waiting_vitals';
+    return status === 'consult_done' || status === 'completed';
+  });
+  const totalCases = medicineQueuePatients.length;
+  const completed = medicineQueuePatients.filter((patient) => (patient.queueStatus || 'waiting_vitals') === 'completed').length;
+  const inQueue = medicineQueuePatients.filter((patient) => (patient.queueStatus || 'waiting_vitals') === 'consult_done').length;
   const pinString = pin.join('');
 
   const handlePinChange = (text: string, index: number) => {
@@ -53,9 +75,67 @@ const MedicineCounter = () => {
     if (val && index < 5) pinRefs.current[index + 1]?.focus();
   };
 
-  const handleJoinOPD = () => { if (pinString.length === 6) setView('queue'); };
+  const joinOpdSession = async (pinValue: string) => {
+    setJoining(true);
+    try {
+      const session = await opdService.joinByPin(pinValue);
+      if (!session) {
+        Alert.alert(t('Invalid PIN'), t('No active OPD session found for this PIN.'));
+        return;
+      }
 
-  const handleSelectPatient = (patient: typeof mockQueue[0]) => {
+      setSessionPin(session.pin);
+      setOpdId(session.opdId);
+      setQueuePatients(session.patients || []);
+      setView('queue');
+    } catch (err: any) {
+      Alert.alert(t('Unable to Join'), err?.message || t('Could not join OPD session.'));
+    } finally {
+      setJoining(false);
+    }
+  };
+
+  const handleJoinOPD = () => {
+    if (pinString.length === 6) {
+      joinOpdSession(pinString);
+    }
+  };
+
+  useEffect(() => {
+    if (presetPin.length === 6) {
+      joinOpdSession(presetPin);
+    }
+  }, [presetPin]);
+
+  useEffect(() => {
+    if (!sessionPin || view === 'pin') return;
+
+    let mounted = true;
+
+    const refreshQueue = async () => {
+      try {
+        const session = await opdService.joinByPin(sessionPin);
+        if (mounted && session) {
+          setQueuePatients(session.patients || []);
+          setOpdId(session.opdId);
+        }
+      } catch (err) {
+        if (mounted) {
+          console.warn('Failed to refresh medicine queue:', err);
+        }
+      }
+    };
+
+    refreshQueue();
+    const timer = setInterval(refreshQueue, 3000);
+
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+    };
+  }, [sessionPin, view]);
+
+  const handleSelectPatient = (patient: QueuePatient) => {
     setActivePatient(patient);
     setComplaintsOpen(true); setVitalsOpen(false);
     setCheckedMeds(new Set());
@@ -66,12 +146,27 @@ const MedicineCounter = () => {
     setCheckedMeds((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   };
 
-  const handleMarkDone = () => {
-    if (activePatient) {
-      setGivenDone((prev) => [...prev, activePatient.token]);
+  const handleMarkDone = async () => {
+    if (!activePatient) return;
+    if (!sessionPin) {
+      Alert.alert(t('Unable to Update'), t('No active OPD session found for this update.'));
+      return;
+    }
+
+    try {
+      await opdService.updatePatientQueueStatus(sessionPin, activePatient.token, 'completed');
+      setQueuePatients((prev) =>
+        prev.map((patient) =>
+          patient.token === activePatient.token
+            ? { ...patient, queueStatus: 'completed' }
+            : patient
+        )
+      );
       Alert.alert(t('Medicines Given'), `${activePatient.name} ${t('medicines dispensed successfully.')}`);
       setActivePatient(null);
       setView('queue');
+    } catch (err: any) {
+      Alert.alert(t('Failed to Update'), err?.message || t('Could not update medicine queue status.'));
     }
   };
 
@@ -97,8 +192,8 @@ const MedicineCounter = () => {
           </View>
         </View>
         <View style={[s.bottomBar, { backgroundColor: colors.surface, borderTopColor: colors.border }]}> 
-          <TouchableOpacity style={[s.primaryBtn, pinString.length < 6 && s.primaryBtnDisabled]} disabled={pinString.length < 6} onPress={handleJoinOPD} activeOpacity={0.85}>
-            <Text style={s.primaryBtnText}>{t('Join OPD')}</Text><Ionicons name="arrow-forward" size={18} color="#fff" />
+          <TouchableOpacity style={[s.primaryBtn, pinString.length < 6 && s.primaryBtnDisabled]} disabled={pinString.length < 6 || joining} onPress={handleJoinOPD} activeOpacity={0.85}>
+            <Text style={s.primaryBtnText}>{joining ? t('Joining...') : t('Join OPD')}</Text><Ionicons name="arrow-forward" size={18} color="#fff" />
           </TouchableOpacity>
           <View style={s.noteRow}><View style={[s.noteLine, { backgroundColor: colors.border }]} /><Text style={[s.noteLabel, { color: colors.mutedText }]}>{t('Note')}</Text><View style={[s.noteLine, { backgroundColor: colors.border }]} /></View>
           <Text style={[s.noteText, { color: colors.mutedText }]}>{t('Ask your Registration Desk teammate to share 6 digit PIN with you')}</Text>
@@ -109,7 +204,8 @@ const MedicineCounter = () => {
 
   // Prescription Screen
   if (view === 'prescription' && activePatient) {
-    const allChecked = checkedMeds.size === mockMedicines.length;
+    const prescribedMedicines = activePatient.medicines || [];
+    const allChecked = prescribedMedicines.length === 0 || checkedMeds.size === prescribedMedicines.length;
     return (
       <View style={[s.root, { backgroundColor: colors.background }]}> 
         <View style={s.blueHeader}>
@@ -136,7 +232,13 @@ const MedicineCounter = () => {
           </TouchableOpacity>
           {complaintsOpen && (
             <View style={s.tagsRow}>
-              {mockComplaints.map((c) => (<View key={c} style={[s.tag, { backgroundColor: colors.subSurface }]}><Text style={[s.tagText, { color: colors.text }]}>{c}</Text></View>))}
+              {(activePatient.complaints && activePatient.complaints.length > 0) ? (
+                activePatient.complaints.map((complaint) => (
+                  <View key={complaint} style={[s.tag, { backgroundColor: colors.subSurface }]}><Text style={[s.tagText, { color: colors.text }]}>{complaint}</Text></View>
+                ))
+              ) : (
+                <Text style={[s.vitalsInfoItem, { color: colors.mutedText }]}>{t('No complaints recorded')}</Text>
+              )}
             </View>
           )}
 
@@ -147,34 +249,40 @@ const MedicineCounter = () => {
           </TouchableOpacity>
           {vitalsOpen && (
             <View style={s.vitalsInfo}>
-              <View style={s.vitalsInfoRow}>
-                <Text style={s.vitalsInfoItem}>Temp. <Text style={s.bold}>{mockVitals.temp} F</Text></Text>
-                <Text style={s.vitalsInfoItem}>B.S. <Text style={s.bold}>{mockVitals.bloodSugar}</Text></Text>
-              </View>
-              <View style={s.vitalsInfoRow}>
-                <Text style={s.vitalsInfoItem}>Pulse <Text style={s.bold}>{mockVitals.pulse} bpm</Text></Text>
-                <Text style={s.vitalsInfoItem}>B.P. <Text style={s.bold}>{mockVitals.bpUpper}/{mockVitals.bpLower}</Text></Text>
-              </View>
-              <Text style={s.vitalsInfoItem}>SPO2 <Text style={s.bold}>{mockVitals.spo2}</Text></Text>
+              {(activePatient.vitals?.temp || activePatient.vitals?.bloodSugar || activePatient.vitals?.pulse || activePatient.vitals?.bpUpper || activePatient.vitals?.bpLower || activePatient.vitals?.spo2) ? (
+                <>
+                  <View style={s.vitalsInfoRow}>
+                    <Text style={s.vitalsInfoItem}>Temp. <Text style={s.bold}>{activePatient.vitals?.temp || '-'}</Text></Text>
+                    <Text style={s.vitalsInfoItem}>B.S. <Text style={s.bold}>{activePatient.vitals?.bloodSugar || '-'}</Text></Text>
+                  </View>
+                  <View style={s.vitalsInfoRow}>
+                    <Text style={s.vitalsInfoItem}>Pulse <Text style={s.bold}>{activePatient.vitals?.pulse || '-'}{activePatient.vitals?.pulse ? ' bpm' : ''}</Text></Text>
+                    <Text style={s.vitalsInfoItem}>B.P. <Text style={s.bold}>{activePatient.vitals?.bpUpper || '-'}/{activePatient.vitals?.bpLower || '-'}</Text></Text>
+                  </View>
+                  <Text style={s.vitalsInfoItem}>SPO2 <Text style={s.bold}>{activePatient.vitals?.spo2 || '-'}</Text></Text>
+                </>
+              ) : (
+                <Text style={[s.vitalsInfoItem, { color: colors.mutedText }]}>{t('No vitals recorded yet')}</Text>
+              )}
               <View style={[s.divider, { backgroundColor: colors.border }]} />
-              <Text style={[s.vitalsInfoItem, { color: colors.mutedText }]}>{t('Allergies')}: <Text style={{ color: colors.mutedText }}>Smoke Allergie</Text></Text>
+              <Text style={[s.vitalsInfoItem, { color: colors.mutedText }]}>{t('Allergies')}: <Text style={{ color: colors.mutedText }}>{activePatient.allergies || t('None reported')}</Text></Text>
             </View>
           )}
 
           {/* Notes from desks */}
           <View style={[s.notesCard, { backgroundColor: colors.surface }]}> 
             <View style={s.noteCardRow}><Ionicons name="document-text-outline" size={16} color={colors.mutedText} /><Text style={[s.noteCardTitle, { color: colors.text }]}>{t('Notes from Registration Desk')}</Text></View>
-            <Text style={[s.noteCardContent, { color: colors.mutedText }]}>Patient felt dizziy earlier today</Text>
+            <Text style={[s.noteCardContent, { color: colors.mutedText }]}>{activePatient.registrationNotes || t('No notes')}</Text>
             <View style={[s.divider, { backgroundColor: colors.border }]} />
             <View style={s.noteCardRow}><Ionicons name="document-text-outline" size={16} color={colors.mutedText} /><Text style={[s.noteCardTitle, { color: colors.text }]}>{t('Notes from Vital Desk')}</Text></View>
-            <Text style={[s.noteCardContent, { color: colors.mutedText }]}>Patient felt dizziy earlier today</Text>
+            <Text style={[s.noteCardContent, { color: colors.mutedText }]}>{activePatient.vitalsNotes || t('No notes')}</Text>
           </View>
 
           {/* Prescribed Medicines Checklist */}
           <View style={{ marginTop: 24 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <Text style={{ fontSize: 15, fontWeight: 'bold', color: colors.text }}>{t('Prescribed Medicines')}</Text>
-              <View style={[s.medCountBadge, { backgroundColor: colors.subSurface }]}><Text style={[s.medCountText, { color: colors.mutedText }]}>{mockMedicines.length}</Text></View>
+              <View style={[s.medCountBadge, { backgroundColor: colors.subSurface }]}><Text style={[s.medCountText, { color: colors.mutedText }]}>{prescribedMedicines.length}</Text></View>
             </View>
 
             {/* Table header */}
@@ -184,7 +292,7 @@ const MedicineCounter = () => {
               <Text style={[s.tableHeaderText, { width: 40 }]} />
             </View>
 
-            {mockMedicines.map((med) => (
+            {prescribedMedicines.map((med) => (
               <View key={med.id} style={[s.medItem, { borderBottomColor: colors.border }]}> 
                 <View style={{ flex: 1 }}>
                   <Text style={[s.medName, { color: colors.text }]}>({med.id}) {med.name}</Text>
@@ -196,12 +304,15 @@ const MedicineCounter = () => {
                 </TouchableOpacity>
               </View>
             ))}
+            {prescribedMedicines.length === 0 && (
+              <Text style={[s.noteCardContent, { color: colors.mutedText }]}>{t('No prescribed medicines available')}</Text>
+            )}
           </View>
 
           {/* Doctor Notes */}
           <View style={[s.notesCard, { backgroundColor: colors.surface }]}> 
             <View style={s.noteCardRow}><MaterialCommunityIcons name="stethoscope" size={18} color={colors.mutedText} /><Text style={{ fontSize: 15, fontWeight: 'bold', color: colors.text }}>{t('Notes from Doctor')}</Text></View>
-            {mockDoctorNotes.map((note, i) => (
+            {(activePatient.doctorNotes && activePatient.doctorNotes.length > 0 ? activePatient.doctorNotes : [t('No notes')]).map((note, i) => (
               <Text key={i} style={[s.doctorNoteItem, { color: colors.mutedText }]}>• {note}</Text>
             ))}
           </View>
@@ -226,7 +337,7 @@ const MedicineCounter = () => {
         </TouchableOpacity>
         <View style={{ flex: 1, marginLeft: 12 }}>
           <Text style={{ fontSize: 20, fontWeight: 'bold', color: colors.text }}>{t('Medicine Counter')}</Text>
-          <Text style={{ fontSize: 13, color: colors.mutedText, marginTop: 2 }}>{opdId}</Text>
+          <Text style={{ fontSize: 13, color: colors.mutedText, marginTop: 2 }}>{opdId || 'OPD-UNKNOWN'}</Text>
         </View>
         <TouchableOpacity><Ionicons name="ellipsis-vertical" size={20} color={colors.mutedText} /></TouchableOpacity>
       </View>
@@ -253,8 +364,8 @@ const MedicineCounter = () => {
 
       <ScrollView style={{ flex: 1, paddingHorizontal: 20, paddingTop: 16 }}>
         <View style={[s.queueList, { backgroundColor: colors.surface }]}> 
-          {mockQueue.map((p) => {
-            const done = givenDone.includes(p.token);
+          {medicineQueuePatients.map((p) => {
+            const done = (p.queueStatus || 'waiting_vitals') === 'completed';
             return (
               <TouchableOpacity key={p.token} style={[s.queueItem, { borderBottomColor: colors.border }, done && { opacity: 0.5 }]} onPress={() => !done && handleSelectPatient(p)} disabled={done}>
                 <View style={[s.queueToken, { backgroundColor: colors.subSurface, borderColor: colors.border }]}><Text style={[s.queueTokenText, { color: colors.text }]}>{p.token}</Text></View>

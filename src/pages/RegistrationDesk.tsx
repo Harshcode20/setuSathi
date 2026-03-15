@@ -3,14 +3,8 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, TextInput,
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { usePatientStore } from '../lib/PatientStore';
+import { opdService, QueueStatus } from '../lib/api';
 import { usePreferences } from '../lib/PreferencesContext';
-
-interface CaseEntry {
-  token: number;
-  patient: { id: string; name: string; gender: string; age: number };
-  symptoms: string[];
-  notes: string;
-}
 
 const RegistrationDesk = () => {
   const navigation = useNavigation();
@@ -18,16 +12,51 @@ const RegistrationDesk = () => {
   const { patients: allPatients, searchPatients } = usePatientStore();
   const { t, colors } = usePreferences();
   const locState = (route.params as any) || {};
-  const opdId = locState.opdId || 'OPD-RAMAGRI-250622';
-  const opdPin = locState.pin || '';
+  const opdPin = typeof locState.pin === 'string' ? locState.pin : '';
 
-  const [cases, setCases] = useState<CaseEntry[]>([]);
+  const [opdId, setOpdId] = useState<string>(typeof locState.opdId === 'string' ? locState.opdId : '');
+  const [queuePatients, setQueuePatients] = useState<Array<{ id: string; name: string; gender: string; age: number; token: number; queueStatus?: QueueStatus }>>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState<typeof allPatients>([]);
 
-  const totalCases = cases.length;
-  const inQueue = cases.length;
+  const totalCases = queuePatients.length;
+  const inQueue = queuePatients.filter((patient) => (patient.queueStatus || 'waiting_vitals') === 'waiting_vitals').length;
+
+  useEffect(() => {
+    if (!opdPin) {
+      setQueuePatients([]);
+      return;
+    }
+
+    let mounted = true;
+
+    const refreshQueue = async () => {
+      try {
+        const session = await opdService.joinByPin(opdPin);
+        if (!mounted) return;
+
+        if (session) {
+          setQueuePatients(session.patients || []);
+          setOpdId(session.opdId || '');
+        } else {
+          setQueuePatients([]);
+        }
+      } catch (err) {
+        if (mounted) {
+          console.warn('Failed to refresh registration queue:', err);
+        }
+      }
+    };
+
+    refreshQueue();
+    const timer = setInterval(refreshQueue, 3000);
+
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+    };
+  }, [opdPin]);
 
   // Search via API when term changes
   useEffect(() => {
@@ -65,7 +94,7 @@ const RegistrationDesk = () => {
         </TouchableOpacity>
         <View style={{ flex: 1, marginLeft: 12 }}>
           <Text style={[styles.headerTitle, { color: colors.text }]}>{t('Registration Desk')}</Text>
-          <Text style={[styles.headerSub, { color: colors.mutedText }]}>{opdId}</Text>
+          <Text style={[styles.headerSub, { color: colors.mutedText }]}>{opdId || 'OPD-UNKNOWN'}</Text>
         </View>
         <TouchableOpacity>
           <Ionicons name="ellipsis-vertical" size={20} color="#999" />
@@ -90,14 +119,14 @@ const RegistrationDesk = () => {
               <View style={[styles.bannerBar, { backgroundColor: 'rgba(255,255,255,0.4)' }]} />
               <View>
                 <Text style={styles.bannerStatNum}>{totalCases}</Text>
-                <Text style={styles.bannerStatLabel}>{t('Todays Total Case')}</Text>
+                <Text style={styles.bannerStatLabel}>{t('Total Patients')}</Text>
               </View>
             </View>
             <View style={styles.bannerStat}>
               <View style={[styles.bannerBar, { backgroundColor: '#FCA5A5' }]} />
               <View>
-                <Text style={styles.bannerStatNum}>{totalCases}</Text>
-                <Text style={styles.bannerStatLabel}>{t('Marked for Vitals')}</Text>
+                <Text style={styles.bannerStatNum}>{inQueue}</Text>
+                <Text style={styles.bannerStatLabel}>{t('Ready for Vitals')}</Text>
               </View>
             </View>
           </View>
@@ -106,7 +135,7 @@ const RegistrationDesk = () => {
 
       {/* Cases List or Empty State */}
       <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 100 }}>
-        {cases.length === 0 ? (
+        {queuePatients.length === 0 ? (
           <View style={styles.emptyState}>
             <View style={styles.emptyIcon}>
               <View style={styles.emptyLine} />
@@ -117,14 +146,14 @@ const RegistrationDesk = () => {
           </View>
         ) : (
           <View style={[styles.casesList, { backgroundColor: colors.surface }]}>
-            {cases.map((c, i) => (
-              <View key={i} style={styles.caseItem}>
+            {queuePatients.map((patient, i) => (
+              <View key={`${patient.id}-${patient.token}-${i}`} style={styles.caseItem}>
                 <View style={styles.caseToken}>
-                  <Text style={styles.caseTokenText}>{c.token}</Text>
+                  <Text style={styles.caseTokenText}>{patient.token}</Text>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.caseName}>{c.patient.name}</Text>
-                  <Text style={styles.caseSub}>{c.patient.id} • {c.patient.gender} • {c.patient.age} Yrs</Text>
+                  <Text style={styles.caseName}>{patient.name}</Text>
+                  <Text style={styles.caseSub}>{patient.id} • {patient.gender} • {patient.age} Yrs</Text>
                 </View>
                 <Ionicons name="ellipsis-vertical" size={18} color="#999" />
               </View>
@@ -189,8 +218,12 @@ const RegistrationDesk = () => {
                 <TouchableOpacity
                   style={styles.patientItem}
                   onPress={() => {
+                    const nextToken = queuePatients.reduce((maxToken, queuedPatient) => {
+                      const token = Number(queuedPatient.token) || 0;
+                      return token > maxToken ? token : maxToken;
+                    }, 0) + 1;
                     setModalOpen(false);
-                    (navigation as any).navigate('StartPatientVisit', { patient, opdPin, nextToken: cases.length + 1 });
+                    (navigation as any).navigate('StartPatientVisit', { patient, opdPin, nextToken });
                   }}
                 >
                   <View style={styles.patientAvatar}>
