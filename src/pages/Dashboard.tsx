@@ -9,21 +9,23 @@ import BottomNav from '../components/BottomNav';
 import { usePatientStore } from '../lib/PatientStore';
 import { useAuth } from '../lib/AuthContext';
 import { authService } from '../lib/api';
+import { usePreferences } from '../lib/PreferencesContext';
 
 const Dashboard = () => {
   const navigation = useNavigation();
   const { patients } = usePatientStore();
-  const { user, doctorProfile } = useAuth();
-  const displayName = doctorProfile?.fullName || user?.displayName || 'Doctor';
-  const displayDoctorId = doctorProfile?.doctorId || 'N/A';
-  const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const { user, userProfile, doctorProfile } = useAuth();
+  const { t, theme, colors, language } = usePreferences();
+  const displayName = userProfile?.fullName || doctorProfile?.fullName || user?.displayName || 'Volunteer';
+  const displayDoctorId = userProfile?.memberId || (doctorProfile as any)?.doctorId || 'N/A';
+  const profileImageSource = userProfile?.photoUri ? { uri: userProfile.photoUri } : doctorAvatarImg;
+  const today = new Date().toLocaleDateString(language === 'gu' ? 'gu-IN' : 'en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const isDark = theme === 'dark';
 
   const handleLogout = () => {
     if (Platform.OS === 'web') {
       if ((globalThis as any).confirm('Are you sure you want to logout?')) {
-        authService.logout().then(() => {
-          navigation.reset({ index: 0, routes: [{ name: 'Login' as never }] });
-        });
+        authService.logout();
       }
       return;
     }
@@ -32,10 +34,7 @@ const Dashboard = () => {
       {
         text: 'Logout',
         style: 'destructive',
-        onPress: async () => {
-          await authService.logout();
-          navigation.reset({ index: 0, routes: [{ name: 'Login' as never }] });
-        },
+        onPress: () => authService.logout(),
       },
     ]);
   };
@@ -45,7 +44,7 @@ const Dashboard = () => {
   const opdStats = { totalOPDs: 12, totalPatients: patients.length, registeredToday, vitalsRecorded: 24, consultsDone: 18, medicinesGiven: 15 };
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 80 }}>
         {/* Header */}
         <View style={styles.header}>
@@ -66,52 +65,56 @@ const Dashboard = () => {
 
         {/* Doctor Profile Card */}
         <View style={styles.profileCardOuter}>
-          <View style={styles.profileCard}>
-            <Image source={doctorAvatarImg} style={styles.profileAvatarImg} />
+          <View style={[styles.profileCard, { backgroundColor: colors.surface }]}> 
+            <Image source={logoImg} style={[styles.profileWatermark, { opacity: isDark ? 0.1 : 0.16 }]} resizeMode="contain" />
+            <Image source={profileImageSource} style={styles.profileAvatarImg} />
             <View style={styles.profileInfo}>
-              <Text style={styles.profileId}>{displayDoctorId}</Text>
-              <Text style={styles.profileName}>{displayName}</Text>
-              <View style={styles.profileBadge}><Ionicons name="calendar-outline" size={12} color="#888" /><Text style={styles.profileBadgeText}>Not Defined</Text></View>
+              <Text style={[styles.profileId, { color: colors.mutedText }]}>{displayDoctorId}</Text>
+              <Text style={[styles.profileName, { color: colors.text }]}>{displayName}</Text>
+              <View style={[styles.profileBadge, { backgroundColor: isDark ? '#111827' : '#f3f4f6' }]}>
+                <Ionicons name="calendar-outline" size={12} color={colors.mutedText} />
+                <Text style={[styles.profileBadgeText, { color: colors.mutedText }]}>{t('dashboard.roleNotDefined')}</Text>
+              </View>
             </View>
           </View>
         </View>
 
         {/* OPD Statistics */}
         <View style={styles.section}>
-          <View style={styles.statsCard}>
-            <Text style={styles.statsTitle}>OPD Statistics</Text>
+          <View style={[styles.statsCard, { backgroundColor: colors.surface }]}> 
+            <Text style={[styles.statsTitle, { color: colors.text }]}>{t('dashboard.opdStatistics')}</Text>
             <View style={styles.bigStatsRow}>
               <View style={[styles.bigStat, { backgroundColor: 'rgba(37,99,235,0.1)' }]}>
                 <MaterialCommunityIcons name="briefcase-outline" size={20} color="#2563EB" />
                 <Text style={[styles.bigStatNum, { color: '#2563EB' }]}>{opdStats.totalOPDs}</Text>
-                <Text style={styles.bigStatLabel}>Total OPDs</Text>
+                <Text style={[styles.bigStatLabel, { color: colors.mutedText }]}>{t('dashboard.totalOpds')}</Text>
               </View>
               <View style={[styles.bigStat, { backgroundColor: 'rgba(13,148,136,0.1)' }]}>
                 <Ionicons name="people-outline" size={20} color="#0D9488" />
                 <Text style={[styles.bigStatNum, { color: '#0D9488' }]}>{opdStats.totalPatients}</Text>
-                <Text style={styles.bigStatLabel}>Total Patients</Text>
+                <Text style={[styles.bigStatLabel, { color: colors.mutedText }]}>{t('dashboard.totalPatients')}</Text>
               </View>
             </View>
             <View style={styles.smallStatsRow}>
-              <View style={styles.smallStat}>
+              <View style={[styles.smallStat, { backgroundColor: colors.subSurface }]}> 
                 <MaterialCommunityIcons name="clipboard-plus-outline" size={16} color="#F97316" />
-                <Text style={styles.smallStatNum}>{opdStats.registeredToday}</Text>
-                <Text style={styles.smallStatLabel}>Registered</Text>
+                <Text style={[styles.smallStatNum, { color: colors.text }]}>{opdStats.registeredToday}</Text>
+                <Text style={[styles.smallStatLabel, { color: colors.mutedText }]}>{t('dashboard.registered')}</Text>
               </View>
-              <View style={styles.smallStat}>
+              <View style={[styles.smallStat, { backgroundColor: colors.subSurface }]}> 
                 <Ionicons name="heart-outline" size={16} color="#F59E0B" />
-                <Text style={styles.smallStatNum}>{opdStats.vitalsRecorded}</Text>
-                <Text style={styles.smallStatLabel}>Vitals</Text>
+                <Text style={[styles.smallStatNum, { color: colors.text }]}>{opdStats.vitalsRecorded}</Text>
+                <Text style={[styles.smallStatLabel, { color: colors.mutedText }]}>{t('dashboard.vitals')}</Text>
               </View>
-              <View style={styles.smallStat}>
+              <View style={[styles.smallStat, { backgroundColor: colors.subSurface }]}> 
                 <MaterialCommunityIcons name="stethoscope" size={16} color="#65A30D" />
-                <Text style={styles.smallStatNum}>{opdStats.consultsDone}</Text>
-                <Text style={styles.smallStatLabel}>Consults</Text>
+                <Text style={[styles.smallStatNum, { color: colors.text }]}>{opdStats.consultsDone}</Text>
+                <Text style={[styles.smallStatLabel, { color: colors.mutedText }]}>{t('dashboard.consults')}</Text>
               </View>
-              <View style={styles.smallStat}>
+              <View style={[styles.smallStat, { backgroundColor: colors.subSurface }]}> 
                 <MaterialCommunityIcons name="pill" size={16} color="#0D9488" />
-                <Text style={styles.smallStatNum}>{opdStats.medicinesGiven}</Text>
-                <Text style={styles.smallStatLabel}>Medicines</Text>
+                <Text style={[styles.smallStatNum, { color: colors.text }]}>{opdStats.medicinesGiven}</Text>
+                <Text style={[styles.smallStatLabel, { color: colors.mutedText }]}>{t('dashboard.medicines')}</Text>
               </View>
             </View>
           </View>
@@ -120,18 +123,18 @@ const Dashboard = () => {
         {/* Quick Actions */}
         <View style={styles.section}>
           <View style={styles.dividerRow}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>Quick Actions</Text>
-            <View style={styles.dividerLine} />
+            <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+            <Text style={[styles.dividerText, { color: colors.mutedText }]}>{t('dashboard.quickActions')}</Text>
+            <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
           </View>
           <View style={styles.actionsRow}>
             <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#0D9488' }]} onPress={() => navigation.navigate('RegisterPatient' as never)} activeOpacity={0.85}>
               <Ionicons name="person-add-outline" size={36} color="#fff" />
-              <Text style={styles.actionBtnText}>Register Patient</Text>
+              <Text style={styles.actionBtnText}>{t('dashboard.registerPatient')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#F97316' }]} onPress={() => navigation.navigate('StartOPD' as never)} activeOpacity={0.85}>
               <MaterialCommunityIcons name="briefcase-outline" size={36} color="#fff" />
-              <Text style={styles.actionBtnText}>Start OPD</Text>
+              <Text style={styles.actionBtnText}>{t('dashboard.startOpd')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -153,7 +156,8 @@ const styles = StyleSheet.create({
   headerDate: { fontSize: 13, color: 'rgba(255,255,255,0.9)' },
   logoutBtn: { marginLeft: 12, padding: 4 },
   profileCardOuter: { marginTop: -40, marginHorizontal: 20 },
-  profileCard: { backgroundColor: '#fff', borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, elevation: 4 },
+  profileCard: { backgroundColor: '#fff', borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, elevation: 4, overflow: 'hidden' },
+  profileWatermark: { position: 'absolute', right: -16, top: -8, width: 170, height: 120 },
   profileAvatarImg: { width: 72, height: 72, borderRadius: 14, borderWidth: 2, borderColor: '#e2e2e2' },
   profileInfo: { flex: 1, marginLeft: 14 },
   profileId: { fontSize: 13, color: '#888' },

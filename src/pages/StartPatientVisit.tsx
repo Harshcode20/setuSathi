@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { opdService } from '../lib/api';
+import { usePreferences } from '../lib/PreferencesContext';
 
 const symptomCategories = [
   {
@@ -52,7 +54,8 @@ const symptomCategories = [
 const StartPatientVisit = () => {
   const navigation = useNavigation();
   const route = useRoute();
-  const { patient } = (route.params as any) || {};
+  const { t, colors } = usePreferences();
+  const { patient, opdPin, nextToken } = (route.params as any) || {};
   const patientData = patient || { id: 'P1234', name: 'Kaminiben sarvaiya', gender: 'Female', age: 58 };
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -72,29 +75,45 @@ const StartPatientVisit = () => {
     return (parts[0]?.[0] || '') + (parts[1]?.[0] || '');
   };
 
-  const handleGenerateToken = () => {
-    const token = Math.floor(1 + Math.random() * 99);
-    Alert.alert(`Token #${token} Generated`, `Patient ${patientData.name} has been registered with ${selected.size} symptom(s).`);
+  const handleGenerateToken = async () => {
+    const token = nextToken || Math.floor(1 + Math.random() * 99);
+
+    // Push patient into the Firestore OPD session so doctor can see them
+    if (opdPin) {
+      try {
+        await opdService.addPatientToSession(opdPin, {
+          id: patientData.id,
+          name: patientData.name,
+          gender: patientData.gender,
+          age: patientData.age,
+          token,
+        });
+      } catch (err) {
+        console.warn('Failed to add patient to OPD session:', err);
+      }
+    }
+
+    Alert.alert(`${t('Token')} #${token} ${t('Generated')}`, `${t('Patient')} ${patientData.name} ${t('has been registered with')} ${selected.size} ${t('symptom(s).')}`);
     navigation.navigate('RegistrationDesk' as never);
   };
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { backgroundColor: colors.surface }]}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Start Patient Visit</Text>
+        <Text style={styles.headerTitle}>{t('Start Patient Visit')}</Text>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="close" size={24} color="#fff" />
         </TouchableOpacity>
       </View>
 
       {/* Patient Info Card */}
-      <View style={styles.patientCard}>
+      <View style={[styles.patientCard, { backgroundColor: colors.surface }]}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.patientLabel}>Patient Info.</Text>
-          <Text style={styles.patientId}>{patientData.id}</Text>
-          <Text style={styles.patientName}>{patientData.name}</Text>
-          <Text style={styles.patientSub}>{patientData.gender} • {patientData.age} Yrs</Text>
+          <Text style={[styles.patientLabel, { color: colors.mutedText }]}>{t('Patient Info.')}</Text>
+          <Text style={[styles.patientId, { color: colors.mutedText }]}>{patientData.id}</Text>
+          <Text style={[styles.patientName, { color: colors.text }]}>{patientData.name}</Text>
+          <Text style={[styles.patientSub, { color: colors.mutedText }]}>{patientData.gender} • {patientData.age} Yrs</Text>
         </View>
         <View style={styles.patientAvatar}>
           <Text style={styles.patientAvatarText}>{getInitials(patientData.name)}</Text>
@@ -134,7 +153,7 @@ const StartPatientVisit = () => {
           <Ionicons name="list-outline" size={18} color="#999" style={{ marginTop: 2 }} />
           <TextInput
             style={styles.notesInput}
-            placeholder="Additional Notes"
+            placeholder={t('Additional Notes')}
             placeholderTextColor="#999"
             value={notes}
             onChangeText={setNotes}
@@ -153,7 +172,7 @@ const StartPatientVisit = () => {
           activeOpacity={0.85}
         >
           <Ionicons name="checkmark" size={18} color="#fff" />
-          <Text style={styles.tokenBtnText}>Generate Token</Text>
+          <Text style={styles.tokenBtnText}>{t('Generate Token')}</Text>
         </TouchableOpacity>
       </View>
     </View>

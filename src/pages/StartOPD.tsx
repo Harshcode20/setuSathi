@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, FlatList } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, FlatList, Image } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { usePreferences } from '../lib/PreferencesContext';
+
+const logoImg = require('../assets/setusaathi-logo.png');
 
 const villages = ['Gediya', 'Ingrodi', 'Karela', 'Kherva', 'Limbad', 'Modhwana', 'Ramagri'];
 
@@ -14,6 +17,7 @@ const deskRoles = [
 
 const StartOPD = () => {
   const navigation = useNavigation();
+  const { t, colors } = usePreferences();
   const [step, setStep] = useState(1);
   const [village, setVillage] = useState('');
   const [deskRole, setDeskRole] = useState('');
@@ -24,28 +28,30 @@ const StartOPD = () => {
   };
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { backgroundColor: colors.surface }]}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => step === 1 ? navigation.goBack() : setStep(1)}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Start OPD</Text>
+        <Text style={styles.headerTitle}>{t('Start OPD')}</Text>
       </View>
+
+      <Image source={logoImg} style={styles.screenWatermark} resizeMode="contain" />
 
       {/* Content */}
       <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 100 }}>
-        <Text style={styles.stepLabel}>Step {step}/2</Text>
+        <Text style={styles.stepLabel}>{t('Step')} {step}/2</Text>
 
         {step === 1 ? (
           <>
-            <Text style={styles.heading}>Select Village</Text>
-            <Text style={styles.sub}>Select village where you are operating your OPD now</Text>
+            <Text style={[styles.heading, { color: colors.text }]}>{t('Select Village')}</Text>
+            <Text style={[styles.sub, { color: colors.mutedText }]}>{t('Select village where you are operating your OPD now')}</Text>
 
             <TouchableOpacity style={styles.selector} onPress={() => setModalVisible(true)}>
               <Ionicons name="location-outline" size={20} color="#999" />
-              <Text style={[styles.selectorText, village ? { color: '#111' } : {}]}>
-                {village || 'Select Village'}
+              <Text style={[styles.selectorText, village ? { color: colors.text } : { color: colors.mutedText }]}>
+                {village || t('Select Village')}
               </Text>
               <Ionicons name="chevron-down" size={18} color="#999" />
             </TouchableOpacity>
@@ -55,7 +61,7 @@ const StartOPD = () => {
               <View style={styles.modalOverlay}>
                 <View style={styles.modalContent}>
                   <View style={styles.modalHeader}>
-                    <Text style={styles.modalTitle}>Select Village</Text>
+                    <Text style={styles.modalTitle}>{t('Select Village')}</Text>
                     <TouchableOpacity onPress={() => setModalVisible(false)}>
                       <Ionicons name="close" size={22} color="#999" />
                     </TouchableOpacity>
@@ -78,8 +84,8 @@ const StartOPD = () => {
           </>
         ) : (
           <>
-            <Text style={styles.heading}>Select Your Desk Role</Text>
-            <Text style={styles.sub}>Confirm the desk you're working on for this OPD.</Text>
+            <Text style={[styles.heading, { color: colors.text }]}>{t('Select Your Desk Role')}</Text>
+            <Text style={[styles.sub, { color: colors.mutedText }]}>{t("Confirm the desk you're working on for this OPD.")}</Text>
 
             <View style={styles.deskGrid}>
               {deskRoles.map((desk) => (
@@ -107,7 +113,7 @@ const StartOPD = () => {
             onPress={() => setStep(2)}
             activeOpacity={0.85}
           >
-            <Text style={styles.primaryBtnText}>Continue to Desk Selection</Text>
+            <Text style={styles.primaryBtnText}>{t('Continue to Desk Selection')}</Text>
             <Ionicons name="arrow-forward" size={18} color="#fff" />
           </TouchableOpacity>
         ) : (
@@ -117,7 +123,7 @@ const StartOPD = () => {
             onPress={handleStart}
             activeOpacity={0.85}
           >
-            <Text style={styles.primaryBtnText}>Start OPD</Text>
+            <Text style={styles.primaryBtnText}>{t('Start OPD')}</Text>
             <Ionicons name="arrow-forward" size={18} color="#fff" />
           </TouchableOpacity>
         )}
@@ -130,6 +136,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#fff', overflow: 'hidden' as any },
   header: { backgroundColor: '#2563EB', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 50, paddingBottom: 16, gap: 12 },
   headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
+  screenWatermark: { position: 'absolute', right: 6, top: 92, width: 150, height: 120, opacity: 0.14 },
   scroll: { flex: 1, paddingHorizontal: 20 },
   stepLabel: { color: '#2563EB', fontWeight: '600', fontSize: 13, marginTop: 24, marginBottom: 4 },
   heading: { fontSize: 20, fontWeight: 'bold', color: '#111', marginBottom: 4 },

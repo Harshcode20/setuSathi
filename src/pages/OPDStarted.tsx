@@ -1,11 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { opdService } from '../lib/api';
+import { useAuth } from '../lib/AuthContext';
+import { usePreferences } from '../lib/PreferencesContext';
 
 const OPDStarted = () => {
   const navigation = useNavigation();
   const route = useRoute();
+  const { user } = useAuth();
+  const { t, colors } = usePreferences();
   const { village = 'Ramagri', deskRole = 'registration' } = (route.params as any) || {};
 
   const deskLabels: Record<string, string> = {
@@ -21,6 +26,17 @@ const OPDStarted = () => {
 
   const [pin] = useState(() => Math.floor(100000 + Math.random() * 900000).toString());
 
+  // Save OPD session to Firestore when component mounts
+  useEffect(() => {
+    opdService.start({
+      village,
+      deskRole,
+      opdId,
+      pin,
+      createdBy: user?.uid || '',
+    }).catch((err) => console.warn('Failed to save OPD session:', err));
+  }, []);
+
   const otherDesks = [
     { id: 'vitals', label: "Vital's Desk", icon: 'heart-pulse' as const, color: '#F97316' },
     { id: 'doctor', label: "Doctor's\nAssistant", icon: 'stethoscope' as const, color: '#65A30D' },
@@ -29,7 +45,7 @@ const OPDStarted = () => {
   ].filter((d) => d.id !== deskRole);
 
   const handleContinue = () => {
-    (navigation as any).navigate('RegistrationDesk', { village, deskRole, opdId });
+    (navigation as any).navigate('RegistrationDesk', { village, deskRole, opdId, pin });
   };
 
   const navigateDesk = (id: string) => {
@@ -39,15 +55,15 @@ const OPDStarted = () => {
   };
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color="#111" />
         </TouchableOpacity>
         <View style={{ flex: 1, marginLeft: 12 }}>
-          <Text style={styles.headerTitle}>{deskLabels[deskRole] || 'Registration Desk'}</Text>
-          <Text style={styles.headerSub}>{opdId}</Text>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>{deskLabels[deskRole] || t('Registration Desk')}</Text>
+          <Text style={[styles.headerSub, { color: colors.mutedText }]}>{opdId}</Text>
         </View>
         <TouchableOpacity>
           <Ionicons name="ellipsis-vertical" size={20} color="#999" />
@@ -56,12 +72,12 @@ const OPDStarted = () => {
 
       <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 30 }}>
         {/* OPD Started Card */}
-        <View style={styles.opdCard}>
+        <View style={[styles.opdCard, { backgroundColor: colors.surface }]}> 
           <TouchableOpacity style={styles.opdStartedBtn} onPress={handleContinue} activeOpacity={0.85}>
-            <Text style={styles.opdStartedText}>OPD Started</Text>
+            <Text style={styles.opdStartedText}>{t('OPD Started')}</Text>
           </TouchableOpacity>
           <View style={styles.pinSection}>
-            <Text style={styles.pinLabel}>6 Digit PIN</Text>
+            <Text style={[styles.pinLabel, { color: colors.mutedText }]}>{t('6 Digit PIN')}</Text>
             <View style={styles.pinRow}>
               {pin.split('').map((digit, i) => (
                 <Text key={i} style={styles.pinDigit}>{digit}</Text>
@@ -73,22 +89,22 @@ const OPDStarted = () => {
         {/* Info Text */}
         <View style={styles.infoRow}>
           <Ionicons name="information-circle-outline" size={18} color="#999" />
-          <Text style={styles.infoText}>Ask your team to Enter this code to begin their OPD</Text>
+          <Text style={[styles.infoText, { color: colors.mutedText }]}>{t('Ask your team to Enter this code to begin their OPD')}</Text>
         </View>
 
         {/* Divider */}
         <View style={styles.dividerRow}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>Other Desk Status</Text>
-          <View style={styles.dividerLine} />
+          <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+          <Text style={[styles.dividerText, { color: colors.mutedText }]}>{t('Other Desk Status')}</Text>
+          <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
         </View>
 
         {/* Other Desks Grid */}
         <View style={styles.deskGrid}>
           {otherDesks.map((desk) => (
-            <TouchableOpacity key={desk.id} style={styles.deskCard} onPress={() => navigateDesk(desk.id)} activeOpacity={0.8}>
+            <TouchableOpacity key={desk.id} style={[styles.deskCard, { backgroundColor: colors.surface }]} onPress={() => navigateDesk(desk.id)} activeOpacity={0.8}>
               <MaterialCommunityIcons name={desk.icon} size={28} color={desk.color} />
-              <Text style={styles.deskLabel}>{desk.label}</Text>
+              <Text style={[styles.deskLabel, { color: colors.text }]}>{desk.label}</Text>
             </TouchableOpacity>
           ))}
         </View>

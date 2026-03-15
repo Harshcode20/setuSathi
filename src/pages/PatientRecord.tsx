@@ -4,6 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import BottomNav from '../components/BottomNav';
 import { usePatientStore } from '../lib/PatientStore';
+import { usePreferences } from '../lib/PreferencesContext';
 
 const colors = [
   { bg: 'rgba(37,99,235,0.15)', text: '#2563EB' },
@@ -16,6 +17,7 @@ const colors = [
 const PatientRecord = () => {
   const navigation = useNavigation();
   const { patients: allPatients } = usePatientStore();
+  const { t, colors } = usePreferences();
   const [search, setSearch] = useState('');
 
   const filtered = search.trim().length > 0
@@ -31,21 +33,21 @@ const PatientRecord = () => {
   };
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Patient Records</Text>
-        <Text style={styles.headerSub}>{allPatients.length} patients registered</Text>
+        <Text style={styles.headerTitle}>{t('Patient Records')}</Text>
+        <Text style={styles.headerSub}>{allPatients.length} {t('patients registered')}</Text>
       </View>
 
       {/* Search */}
       <View style={styles.searchContainer}>
-        <View style={styles.searchBar}>
+        <View style={[styles.searchBar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Ionicons name="search" size={20} color="#999" />
           <TextInput
-            style={styles.searchInput}
-            placeholder="Search by name or ID..."
-            placeholderTextColor="#999"
+            style={[styles.searchInput, { color: colors.text }]}
+            placeholder={t('Search by name or ID...')}
+            placeholderTextColor={colors.mutedText}
             value={search}
             onChangeText={setSearch}
             maxLength={100}
@@ -60,14 +62,14 @@ const PatientRecord = () => {
 
       {/* Results count */}
       <View style={styles.countRow}>
-        <Text style={styles.countText}>
-          {search.trim() ? `${filtered.length} results found` : 'All patients'}
+        <Text style={[styles.countText, { color: colors.mutedText }]}>
+          {search.trim() ? `${filtered.length} ${t('results found')}` : t('All patients')}
         </Text>
       </View>
 
       {/* Patient List */}
       <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 80 }}>
-        <View style={styles.listCard}>
+        <View style={[styles.listCard, { backgroundColor: colors.surface }]}> 
           {filtered.map((patient, i) => {
             const color = colors[i % colors.length];
             return (
@@ -76,9 +78,9 @@ const PatientRecord = () => {
                   <Text style={[styles.avatarText, { color: color.text }]}>{getInitials(patient.name)}</Text>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.itemName}>{patient.name}</Text>
-                  <Text style={styles.itemSub}>{patient.id} • {patient.gender} • {patient.age} Yrs</Text>
-                  <Text style={styles.itemSub}>{patient.village} • Last: {patient.lastVisit}</Text>
+                  <Text style={[styles.itemName, { color: colors.text }]}>{patient.name}</Text>
+                  <Text style={[styles.itemSub, { color: colors.mutedText }]}>{patient.id} • {patient.gender} • {patient.age} Yrs</Text>
+                  <Text style={[styles.itemSub, { color: colors.mutedText }]}>{patient.village} • {t('Last')}: {patient.lastVisit}</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={16} color="#999" />
               </TouchableOpacity>
@@ -88,8 +90,8 @@ const PatientRecord = () => {
 
         {filtered.length === 0 && (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>No patients found</Text>
-            <Text style={styles.emptySub}>Try a different search term</Text>
+            <Text style={[styles.emptyTitle, { color: colors.mutedText }]}>{t('No patients found')}</Text>
+            <Text style={[styles.emptySub, { color: colors.mutedText }]}>{t('Try a different search term')}</Text>
           </View>
         )}
       </ScrollView>

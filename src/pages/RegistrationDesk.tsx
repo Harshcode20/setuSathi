@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, TextInput,
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { usePatientStore } from '../lib/PatientStore';
+import { usePreferences } from '../lib/PreferencesContext';
 
 interface CaseEntry {
   token: number;
@@ -15,8 +16,10 @@ const RegistrationDesk = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { patients: allPatients, searchPatients } = usePatientStore();
+  const { t, colors } = usePreferences();
   const locState = (route.params as any) || {};
   const opdId = locState.opdId || 'OPD-RAMAGRI-250622';
+  const opdPin = locState.pin || '';
 
   const [cases, setCases] = useState<CaseEntry[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
@@ -54,15 +57,15 @@ const RegistrationDesk = () => {
   };
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}> 
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color="#111" />
         </TouchableOpacity>
         <View style={{ flex: 1, marginLeft: 12 }}>
-          <Text style={styles.headerTitle}>Registration Desk</Text>
-          <Text style={styles.headerSub}>{opdId}</Text>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>{t('Registration Desk')}</Text>
+          <Text style={[styles.headerSub, { color: colors.mutedText }]}>{opdId}</Text>
         </View>
         <TouchableOpacity>
           <Ionicons name="ellipsis-vertical" size={20} color="#999" />
@@ -75,11 +78,11 @@ const RegistrationDesk = () => {
           <View style={styles.bannerTop}>
             <View style={styles.bannerTopLeft}>
               <View style={styles.pulseDot} />
-              <Text style={styles.bannerLabel}>Ready for Vitals</Text>
+              <Text style={styles.bannerLabel}>{t('Ready for Vitals')}</Text>
             </View>
             <View style={styles.bannerBadge}>
               <Text style={styles.bannerBadgeNum}>{inQueue} </Text>
-              <Text style={styles.bannerBadgeText}>In Queue</Text>
+              <Text style={styles.bannerBadgeText}>{t('In Queue')}</Text>
             </View>
           </View>
           <View style={styles.bannerStats}>
@@ -87,14 +90,14 @@ const RegistrationDesk = () => {
               <View style={[styles.bannerBar, { backgroundColor: 'rgba(255,255,255,0.4)' }]} />
               <View>
                 <Text style={styles.bannerStatNum}>{totalCases}</Text>
-                <Text style={styles.bannerStatLabel}>Todays Total Case</Text>
+                <Text style={styles.bannerStatLabel}>{t('Todays Total Case')}</Text>
               </View>
             </View>
             <View style={styles.bannerStat}>
               <View style={[styles.bannerBar, { backgroundColor: '#FCA5A5' }]} />
               <View>
                 <Text style={styles.bannerStatNum}>{totalCases}</Text>
-                <Text style={styles.bannerStatLabel}>Marked for Vitals</Text>
+                <Text style={styles.bannerStatLabel}>{t('Marked for Vitals')}</Text>
               </View>
             </View>
           </View>
@@ -110,10 +113,10 @@ const RegistrationDesk = () => {
               <View style={[styles.emptyLine, { width: 50 }]} />
             </View>
             <Text style={styles.emptyTitle}>No Cases Created Yet</Text>
-            <Text style={styles.emptySub}>Start by creating a new case to begin today's OPD.</Text>
+            <Text style={styles.emptySub}>{t("Start by creating a new case to begin today's OPD.")}</Text>
           </View>
         ) : (
-          <View style={styles.casesList}>
+          <View style={[styles.casesList, { backgroundColor: colors.surface }]}>
             {cases.map((c, i) => (
               <View key={i} style={styles.caseItem}>
                 <View style={styles.caseToken}>
@@ -134,11 +137,11 @@ const RegistrationDesk = () => {
       <View style={styles.bottomBar}>
         <TouchableOpacity style={styles.outlineBtn} onPress={() => navigation.navigate('RegisterPatient' as never)}>
           <Ionicons name="person-add-outline" size={18} color="#111" />
-          <Text style={styles.outlineBtnText}>Register New</Text>
+          <Text style={styles.outlineBtnText}>{t('Register New')}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.primaryBtn} onPress={() => { setSearch(''); setModalOpen(true); }}>
           <MaterialCommunityIcons name="clipboard-plus-outline" size={18} color="#fff" />
-          <Text style={styles.primaryBtnText}>New Case</Text>
+          <Text style={styles.primaryBtnText}>{t('New Case')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -149,7 +152,7 @@ const RegistrationDesk = () => {
             <View style={styles.modalHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.modalTitle}>New Patient Case</Text>
-                <Text style={styles.modalSub}>Search for an existing patient or register a new one to create a case.</Text>
+                <Text style={styles.modalSub}>{t('Search for an existing patient or register a new one to create a case.')}</Text>
               </View>
               <TouchableOpacity onPress={() => setModalOpen(false)}>
                 <Ionicons name="close" size={22} color="#999" />
@@ -161,7 +164,7 @@ const RegistrationDesk = () => {
               <Ionicons name="search" size={20} color="#999" />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search patient name..."
+                placeholder={t('Search patient name...')}
                 placeholderTextColor="#999"
                 value={search}
                 onChangeText={setSearch}
@@ -175,7 +178,7 @@ const RegistrationDesk = () => {
             </View>
 
             {search.trim().length > 0 && (
-              <Text style={styles.searchCount}>{filtered.length} patients found</Text>
+              <Text style={styles.searchCount}>{filtered.length} {t('patients found')}</Text>
             )}
 
             <FlatList
@@ -187,7 +190,7 @@ const RegistrationDesk = () => {
                   style={styles.patientItem}
                   onPress={() => {
                     setModalOpen(false);
-                    (navigation as any).navigate('StartPatientVisit', { patient });
+                    (navigation as any).navigate('StartPatientVisit', { patient, opdPin, nextToken: cases.length + 1 });
                   }}
                 >
                   <View style={styles.patientAvatar}>
@@ -203,9 +206,9 @@ const RegistrationDesk = () => {
             />
 
             <View style={styles.modalFooter}>
-              <Text style={styles.modalFooterText}>Didn't found the patient you are looking for?</Text>
+              <Text style={styles.modalFooterText}>{t("Didn't found the patient you are looking for?")}</Text>
               <TouchableOpacity onPress={() => { setModalOpen(false); navigation.navigate('RegisterPatient' as never); }}>
-                <Text style={styles.modalFooterLink}>Go Register New Patient</Text>
+                <Text style={styles.modalFooterLink}>{t('Go Register New Patient')}</Text>
               </TouchableOpacity>
             </View>
           </View>

@@ -2,24 +2,31 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-
-const tabs = [
-  { name: 'Dashboard', icon: 'home-outline' as const, activeIcon: 'home' as const, route: 'Dashboard' },
-  { name: 'Records', icon: 'people-outline' as const, activeIcon: 'people' as const, route: 'PatientRecord' },
-];
+import { useAuth } from '../lib/AuthContext';
+import { usePreferences } from '../lib/PreferencesContext';
 
 const BottomNav = () => {
   const navigation = useNavigation();
   const route = useRoute();
+  const { userProfile } = useAuth();
+  const { t, colors } = usePreferences();
+
+  const homeRoute = userProfile?.role === 'doctor' ? 'DoctorDashboard' : 'Dashboard';
+
+  const tabs = [
+    { name: t('nav.home'), icon: 'home-outline' as const, activeIcon: 'home' as const, route: homeRoute },
+    { name: t('nav.records'), icon: 'people-outline' as const, activeIcon: 'people' as const, route: 'PatientRecord' },
+    { name: t('nav.settings'), icon: 'settings-outline' as const, activeIcon: 'settings' as const, route: 'Settings' },
+  ];
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
       {tabs.map((tab) => {
         const isActive = route.name === tab.route;
         return (
           <TouchableOpacity key={tab.name} style={styles.tab} onPress={() => navigation.navigate(tab.route as never)} activeOpacity={0.7}>
             <Ionicons name={isActive ? tab.activeIcon : tab.icon} size={24} color={isActive ? '#2563EB' : '#888'} />
-            <Text style={[styles.tabText, isActive && styles.tabTextActive]}>{tab.name}</Text>
+            <Text style={[styles.tabText, { color: colors.mutedText }, isActive && styles.tabTextActive]}>{tab.name}</Text>
           </TouchableOpacity>
         );
       })}

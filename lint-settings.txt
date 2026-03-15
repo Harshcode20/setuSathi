@@ -1,0 +1,10 @@
+﻿
+C:\Users\91798\setuSathi\src\pages\Settings.tsx
+   67:36  warning  Inline style: { backgroundColor: '#2563EB' }                         react-native/no-inline-styles
+   72:22  warning  Inline style: { width: 24 }                                          react-native/no-inline-styles
+   97:85  warning  Inline style: { marginRight: 8 }                                     react-native/no-inline-styles
+  132:48  warning  Inline style: { color: "language === 'en' ? '#fff' : colors.text" }  react-native/no-inline-styles
+  144:48  warning  Inline style: { color: "language === 'gu' ? '#fff' : colors.text" }  react-native/no-inline-styles
+
+Γ£û 5 problems (0 errors, 5 warnings)
+

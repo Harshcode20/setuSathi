@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { usePreferences } from '../lib/PreferencesContext';
 
 const mockQueue = [
   { id: 'P1234', name: 'Dharamshinhbhai Prajapati', gender: 'Male', age: 58, token: 1 },
@@ -34,6 +35,7 @@ type ViewState = 'pin' | 'queue' | 'consult';
 
 const DoctorAssistant = () => {
   const navigation = useNavigation();
+  const { t, colors } = usePreferences();
   const pinRefs = useRef<Array<TextInput | null>>([]);
 
   const [view, setView] = useState<ViewState>('pin');
@@ -87,7 +89,7 @@ const DoctorAssistant = () => {
   const handleSubmitConsult = () => {
     if (activePatient) {
       setConsultDone((prev) => [...prev, activePatient.token]);
-      Alert.alert('Consultation Complete', `${activePatient.name} consultation submitted successfully.`);
+      Alert.alert(t('Consultation Complete'), `${activePatient.name} ${t('consultation submitted successfully.')}`);
       setActivePatient(null);
       setView('queue');
     }
@@ -96,17 +98,17 @@ const DoctorAssistant = () => {
   // PIN Entry
   if (view === 'pin') {
     return (
-      <View style={s.root}>
+      <View style={[s.root, { backgroundColor: colors.background }]}> 
         <View style={s.simpleHeader}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#111" />
           </TouchableOpacity>
-          <Text style={s.simpleHeaderTitle}>Doctor's Assistant</Text>
+          <Text style={s.simpleHeaderTitle}>{t("Doctor's Assistant")}</Text>
         </View>
         <View style={s.pinCenter}>
           <Text style={{ fontSize: 48, marginBottom: 16 }}>🔒</Text>
-          <Text style={s.pinTitle}>Enter OPD Code to Join</Text>
-          <Text style={s.pinSub}><Text style={{ fontWeight: '600' }}>Registration desk</Text> has already started the OPD session. Please enter the 6-digit PIN to begin.</Text>
+          <Text style={s.pinTitle}>{t('Enter OPD Code to Join')}</Text>
+          <Text style={s.pinSub}><Text style={{ fontWeight: '600' }}>{t('Registration desk')}</Text> {t('has already started the OPD session. Please enter the 6-digit PIN to begin.')}</Text>
           <View style={s.pinRow}>
             {pin.map((digit, i) => (
               <TextInput key={i} ref={(ref) => { pinRefs.current[i] = ref; }} style={s.pinInput} value={digit}
@@ -116,10 +118,10 @@ const DoctorAssistant = () => {
         </View>
         <View style={s.bottomBar}>
           <TouchableOpacity style={[s.primaryBtn, pinString.length < 6 && s.primaryBtnDisabled]} disabled={pinString.length < 6} onPress={handleJoinOPD} activeOpacity={0.85}>
-            <Text style={s.primaryBtnText}>Join OPD</Text><Ionicons name="arrow-forward" size={18} color="#fff" />
+            <Text style={s.primaryBtnText}>{t('Join OPD')}</Text><Ionicons name="arrow-forward" size={18} color="#fff" />
           </TouchableOpacity>
-          <View style={s.noteRow}><View style={s.noteLine} /><Text style={s.noteLabel}>Note</Text><View style={s.noteLine} /></View>
-          <Text style={s.noteText}>Ask your Registration Desk teammate to share 6 digit PIN with you</Text>
+          <View style={s.noteRow}><View style={s.noteLine} /><Text style={s.noteLabel}>{t('Note')}</Text><View style={s.noteLine} /></View>
+          <Text style={s.noteText}>{t('Ask your Registration Desk teammate to share 6 digit PIN with you')}</Text>
         </View>
       </View>
     );
@@ -128,9 +130,9 @@ const DoctorAssistant = () => {
   // Consult Screen
   if (view === 'consult' && activePatient) {
     return (
-      <View style={s.root}>
+      <View style={[s.root, { backgroundColor: colors.background }]}> 
         <View style={s.blueHeader}>
-          <Text style={s.blueHeaderTitle}>Consulting Patient</Text>
+          <Text style={s.blueHeaderTitle}>{t('Consulting Patient')}</Text>
           <TouchableOpacity onPress={() => setView('queue')}><Ionicons name="close" size={24} color="#fff" /></TouchableOpacity>
         </View>
 
@@ -148,7 +150,7 @@ const DoctorAssistant = () => {
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 100, paddingHorizontal: 20 }}>
           {/* Complaints */}
           <TouchableOpacity style={s.collapsible} onPress={() => setComplaintsOpen(!complaintsOpen)}>
-            <View style={s.collLeft}><Ionicons name="document-text-outline" size={18} color="#2563EB" /><Text style={s.collTitle}>Patient Complaints</Text></View>
+            <View style={s.collLeft}><Ionicons name="document-text-outline" size={18} color="#2563EB" /><Text style={s.collTitle}>{t('Patient Complaints')}</Text></View>
             <Ionicons name={complaintsOpen ? 'chevron-up' : 'chevron-down'} size={20} color="#2563EB" />
           </TouchableOpacity>
           {complaintsOpen && (
@@ -159,7 +161,7 @@ const DoctorAssistant = () => {
 
           {/* Vitals */}
           <TouchableOpacity style={[s.collapsible, { marginTop: 8 }]} onPress={() => setVitalsOpen(!vitalsOpen)}>
-            <View style={s.collLeft}><Ionicons name="heart-outline" size={18} color="#999" /><Text style={s.collTitle}>Recorded Vitals</Text></View>
+            <View style={s.collLeft}><Ionicons name="heart-outline" size={18} color="#999" /><Text style={s.collTitle}>{t('Recorded Vitals')}</Text></View>
             <Ionicons name={vitalsOpen ? 'chevron-up' : 'chevron-down'} size={20} color="#2563EB" />
           </TouchableOpacity>
           {vitalsOpen && (
@@ -195,7 +197,7 @@ const DoctorAssistant = () => {
 
           {/* Diagnosis */}
           <View style={s.sectionCard}>
-            <View style={s.sectionCardHeader}><MaterialCommunityIcons name="stethoscope" size={18} color="#999" /><Text style={s.sectionCardTitle}>Doctor's Diagnosis</Text></View>
+            <View style={s.sectionCardHeader}><MaterialCommunityIcons name="stethoscope" size={18} color="#999" /><Text style={s.sectionCardTitle}>{t("Doctor's Diagnosis")}</Text></View>
             <View style={s.tagsRow}>
               {diagnosisOptions.map((d) => (
                 <TouchableOpacity key={d.id} style={[s.selectTag, selectedDiagnosis.has(d.id) && s.selectTagActive]} onPress={() => toggleDiagnosis(d.id)}>
@@ -205,7 +207,7 @@ const DoctorAssistant = () => {
             </View>
 
             <View style={s.noteCardDivider} />
-            <View style={s.sectionCardHeader}><Ionicons name="document-text-outline" size={18} color="#999" /><Text style={s.sectionCardTitle}>Labtest Investigation</Text></View>
+            <View style={s.sectionCardHeader}><Ionicons name="document-text-outline" size={18} color="#999" /><Text style={s.sectionCardTitle}>{t('Labtest Investigation')}</Text></View>
             <View style={s.tagsRow}>
               {labTestOptions.map((t) => (
                 <TouchableOpacity key={t.id} style={[s.selectTag, selectedLabTests.has(t.id) && s.selectTagActive]} onPress={() => toggleLabTest(t.id)}>
@@ -219,10 +221,10 @@ const DoctorAssistant = () => {
           <View style={s.sectionCard}>
             <View style={s.sectionCardHeader}>
               <MaterialCommunityIcons name="pill" size={18} color="#999" />
-              <Text style={[s.sectionCardTitle, { flex: 1 }]}>Prescribed Medicines</Text>
+              <Text style={[s.sectionCardTitle, { flex: 1 }]}>{t('Prescribed Medicines')}</Text>
               <TouchableOpacity onPress={addMedicine}><Ionicons name="add" size={22} color="#2563EB" /></TouchableOpacity>
             </View>
-            {medicines.length === 0 && <Text style={s.emptyMedText}>Tap + to add medicines</Text>}
+            {medicines.length === 0 && <Text style={s.emptyMedText}>{t('Tap + to add medicines')}</Text>}
             {medicines.map((med, i) => (
               <View key={i} style={s.medRow}>
                 <MaterialCommunityIcons name="pill" size={16} color="#2563EB" />
@@ -239,7 +241,7 @@ const DoctorAssistant = () => {
         <View style={s.bottomBar}>
           <TouchableOpacity style={s.primaryBtn} onPress={handleSubmitConsult} activeOpacity={0.85}>
             <Ionicons name="checkmark" size={18} color="#fff" />
-            <Text style={s.primaryBtnText}>Complete & Take Next Patient</Text>
+            <Text style={s.primaryBtnText}>{t('Complete & Take Next Patient')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -248,13 +250,13 @@ const DoctorAssistant = () => {
 
   // Queue Screen
   return (
-    <View style={s.root}>
+    <View style={[s.root, { backgroundColor: colors.background }]}> 
       <View style={s.simpleHeader}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color="#111" />
         </TouchableOpacity>
         <View style={{ flex: 1, marginLeft: 12 }}>
-          <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#111' }}>Doctor's Assistant</Text>
+          <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#111' }}>{t("Doctor's Assistant")}</Text>
           <Text style={{ fontSize: 13, color: '#999', marginTop: 2 }}>{opdId}</Text>
         </View>
         <TouchableOpacity><Ionicons name="ellipsis-vertical" size={20} color="#999" /></TouchableOpacity>
@@ -266,16 +268,16 @@ const DoctorAssistant = () => {
           <View style={s.bannerTop}>
             <View style={s.bannerTopLeft}>
               <View style={[s.pulseDot, { backgroundColor: '#BEF264' }]} />
-              <Text style={s.bannerLabel}>Ready for Doctor</Text>
+              <Text style={s.bannerLabel}>{t('Ready for Doctor')}</Text>
             </View>
             <View style={s.bannerBadge}>
               <Text style={[s.bannerBadgeNum, { color: '#4D7C0F' }]}>{inQueue} </Text>
-              <Text style={[s.bannerBadgeLabel, { color: '#4D7C0F' }]}>In Queue</Text>
+              <Text style={[s.bannerBadgeLabel, { color: '#4D7C0F' }]}>{t('In Queue')}</Text>
             </View>
           </View>
           <View style={s.bannerStats}>
-            <View style={s.bannerStat}><View style={[s.bannerBar, { backgroundColor: 'rgba(255,255,255,0.4)' }]} /><View><Text style={s.bannerStatNum}>{totalCases}</Text><Text style={s.bannerStatLabel}>Todays Total Case</Text></View></View>
-            <View style={s.bannerStat}><View style={[s.bannerBar, { backgroundColor: '#BEF264' }]} /><View><Text style={s.bannerStatNum}>{completed}</Text><Text style={s.bannerStatLabel}>Consult Done</Text></View></View>
+            <View style={s.bannerStat}><View style={[s.bannerBar, { backgroundColor: 'rgba(255,255,255,0.4)' }]} /><View><Text style={s.bannerStatNum}>{totalCases}</Text><Text style={s.bannerStatLabel}>{t('Todays Total Case')}</Text></View></View>
+            <View style={s.bannerStat}><View style={[s.bannerBar, { backgroundColor: '#BEF264' }]} /><View><Text style={s.bannerStatNum}>{completed}</Text><Text style={s.bannerStatLabel}>{t('Consult Done')}</Text></View></View>
           </View>
         </View>
       </View>

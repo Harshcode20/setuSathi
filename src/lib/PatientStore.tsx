@@ -78,7 +78,8 @@ export const PatientProvider = ({ children }: { children: React.ReactNode }) => 
       const data = await patientService.getAll();
       setPatients(data.map(mapApiToPatient));
     } catch (err) {
-      console.warn('Failed to fetch patients:', err);
+      console.warn('Failed to fetch patients, using demo data:', err);
+      setPatients(defaultPatients);
     } finally {
       setLoading(false);
     }

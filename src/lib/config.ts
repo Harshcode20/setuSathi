@@ -17,6 +17,11 @@
 // When false, the app uses demo/mock data everywhere.
 export const USE_BACKEND = true;
 
+// ─── Auth Session Behavior ──────────────────────────
+// When true, app signs out any persisted Firebase session on startup
+// so users always land on Login first.
+export const FORCE_LOGIN_ON_APP_START = true;
+
 // ─── API Server ──────────────────────────────────────
 // Base URL for your REST / GraphQL backend
 export const API_BASE_URL = 'http://localhost:8000';

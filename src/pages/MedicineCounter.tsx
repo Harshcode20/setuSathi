@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { usePreferences } from '../lib/PreferencesContext';
 
 const mockQueue = [
   { id: 'P1234', name: 'Dharamshinhbhai Prajapati', gender: 'Male', age: 58, token: 1 },
@@ -26,6 +27,7 @@ type ViewState = 'pin' | 'queue' | 'prescription';
 
 const MedicineCounter = () => {
   const navigation = useNavigation();
+  const { t, colors } = usePreferences();
   const pinRefs = useRef<Array<TextInput | null>>([]);
 
   const [view, setView] = useState<ViewState>('pin');
@@ -67,7 +69,7 @@ const MedicineCounter = () => {
   const handleMarkDone = () => {
     if (activePatient) {
       setGivenDone((prev) => [...prev, activePatient.token]);
-      Alert.alert('Medicines Given', `${activePatient.name} medicines dispensed successfully.`);
+      Alert.alert(t('Medicines Given'), `${activePatient.name} ${t('medicines dispensed successfully.')}`);
       setActivePatient(null);
       setView('queue');
     }
@@ -76,30 +78,30 @@ const MedicineCounter = () => {
   // PIN Entry
   if (view === 'pin') {
     return (
-      <View style={s.root}>
-        <View style={s.simpleHeader}>
+      <View style={[s.root, { backgroundColor: colors.surface }]}> 
+        <View style={[s.simpleHeader, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}> 
           <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={24} color="#111" />
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
-          <Text style={s.simpleHeaderTitle}>Medicine Counter</Text>
+          <Text style={[s.simpleHeaderTitle, { color: colors.text }]}>{t('Medicine Counter')}</Text>
         </View>
         <View style={s.pinCenter}>
           <Text style={{ fontSize: 48, marginBottom: 16 }}>🔒</Text>
-          <Text style={s.pinTitle}>Enter OPD Code to Join</Text>
-          <Text style={s.pinSub}><Text style={{ fontWeight: '600' }}>Registration desk</Text> has already started the OPD session. Please enter the 6-digit PIN to begin.</Text>
+          <Text style={[s.pinTitle, { color: colors.text }]}>{t('Enter OPD Code to Join')}</Text>
+          <Text style={[s.pinSub, { color: colors.mutedText }]}><Text style={{ fontWeight: '600' }}>{t('Registration desk')}</Text> {t('has already started the OPD session. Please enter the 6-digit PIN to begin.')}</Text>
           <View style={s.pinRow}>
             {pin.map((digit, i) => (
-              <TextInput key={i} ref={(ref) => { pinRefs.current[i] = ref; }} style={s.pinInput} value={digit}
-                onChangeText={(t) => handlePinChange(t, i)} keyboardType="number-pad" maxLength={1} textAlign="center" />
+              <TextInput key={i} ref={(ref) => { pinRefs.current[i] = ref; }} style={[s.pinInput, { borderColor: colors.border, color: colors.text }]} value={digit}
+                onChangeText={(digitText) => handlePinChange(digitText, i)} keyboardType="number-pad" maxLength={1} textAlign="center" />
             ))}
           </View>
         </View>
-        <View style={s.bottomBar}>
+        <View style={[s.bottomBar, { backgroundColor: colors.surface, borderTopColor: colors.border }]}> 
           <TouchableOpacity style={[s.primaryBtn, pinString.length < 6 && s.primaryBtnDisabled]} disabled={pinString.length < 6} onPress={handleJoinOPD} activeOpacity={0.85}>
-            <Text style={s.primaryBtnText}>Join OPD</Text><Ionicons name="arrow-forward" size={18} color="#fff" />
+            <Text style={s.primaryBtnText}>{t('Join OPD')}</Text><Ionicons name="arrow-forward" size={18} color="#fff" />
           </TouchableOpacity>
-          <View style={s.noteRow}><View style={s.noteLine} /><Text style={s.noteLabel}>Note</Text><View style={s.noteLine} /></View>
-          <Text style={s.noteText}>Ask your Registration Desk teammate to share 6 digit PIN with you</Text>
+          <View style={s.noteRow}><View style={[s.noteLine, { backgroundColor: colors.border }]} /><Text style={[s.noteLabel, { color: colors.mutedText }]}>{t('Note')}</Text><View style={[s.noteLine, { backgroundColor: colors.border }]} /></View>
+          <Text style={[s.noteText, { color: colors.mutedText }]}>{t('Ask your Registration Desk teammate to share 6 digit PIN with you')}</Text>
         </View>
       </View>
     );
@@ -109,38 +111,38 @@ const MedicineCounter = () => {
   if (view === 'prescription' && activePatient) {
     const allChecked = checkedMeds.size === mockMedicines.length;
     return (
-      <View style={s.root}>
+      <View style={[s.root, { backgroundColor: colors.background }]}> 
         <View style={s.blueHeader}>
-          <Text style={s.blueHeaderTitle}>Patient Prescription</Text>
+          <Text style={s.blueHeaderTitle}>{t('Patient Prescription')}</Text>
           <TouchableOpacity onPress={() => setView('queue')}><Ionicons name="close" size={24} color="#fff" /></TouchableOpacity>
         </View>
 
         {/* Patient Info */}
-        <View style={s.patientCard}>
+        <View style={[s.patientCard, { backgroundColor: colors.surface }]}> 
           <View style={{ flex: 1 }}>
-            <Text style={s.smallLabel}>Patient Info.</Text>
-            <Text style={s.smallLabel}>{activePatient.id}</Text>
-            <Text style={s.patientName}>{activePatient.name}</Text>
-            <Text style={s.patientSub}>{activePatient.gender} • {activePatient.age} Yrs</Text>
+            <Text style={[s.smallLabel, { color: colors.mutedText }]}>{t('Patient Info.')}</Text>
+            <Text style={[s.smallLabel, { color: colors.mutedText }]}>{activePatient.id}</Text>
+            <Text style={[s.patientName, { color: colors.text }]}>{activePatient.name}</Text>
+            <Text style={[s.patientSub, { color: colors.mutedText }]}>{t(activePatient.gender)} • {activePatient.age} {t('Yrs')}</Text>
           </View>
-          <View style={s.tokenBadge}><Text style={s.tokenBadgeText}>{activePatient.token}</Text></View>
+          <View style={[s.tokenBadge, { borderColor: colors.border, backgroundColor: colors.subSurface }]}><Text style={[s.tokenBadgeText, { color: colors.text }]}>{activePatient.token}</Text></View>
         </View>
 
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 100, paddingHorizontal: 20 }}>
           {/* Complaints */}
           <TouchableOpacity style={s.collapsible} onPress={() => setComplaintsOpen(!complaintsOpen)}>
-            <View style={s.collLeft}><Ionicons name="document-text-outline" size={18} color="#2563EB" /><Text style={s.collTitle}>Patient Complaints</Text></View>
+            <View style={s.collLeft}><Ionicons name="document-text-outline" size={18} color="#2563EB" /><Text style={[s.collTitle, { color: colors.text }]}>{t('Patient Complaints')}</Text></View>
             <Ionicons name={complaintsOpen ? 'chevron-up' : 'chevron-down'} size={20} color="#2563EB" />
           </TouchableOpacity>
           {complaintsOpen && (
             <View style={s.tagsRow}>
-              {mockComplaints.map((c) => (<View key={c} style={s.tag}><Text style={s.tagText}>{c}</Text></View>))}
+              {mockComplaints.map((c) => (<View key={c} style={[s.tag, { backgroundColor: colors.subSurface }]}><Text style={[s.tagText, { color: colors.text }]}>{c}</Text></View>))}
             </View>
           )}
 
           {/* Vitals */}
           <TouchableOpacity style={[s.collapsible, { marginTop: 8 }]} onPress={() => setVitalsOpen(!vitalsOpen)}>
-            <View style={s.collLeft}><Ionicons name="heart-outline" size={18} color="#999" /><Text style={s.collTitle}>Recorded Vitals</Text></View>
+            <View style={s.collLeft}><Ionicons name="heart-outline" size={18} color={colors.mutedText} /><Text style={[s.collTitle, { color: colors.text }]}>{t('Recorded Vitals')}</Text></View>
             <Ionicons name={vitalsOpen ? 'chevron-up' : 'chevron-down'} size={20} color="#2563EB" />
           </TouchableOpacity>
           {vitalsOpen && (
@@ -154,41 +156,41 @@ const MedicineCounter = () => {
                 <Text style={s.vitalsInfoItem}>B.P. <Text style={s.bold}>{mockVitals.bpUpper}/{mockVitals.bpLower}</Text></Text>
               </View>
               <Text style={s.vitalsInfoItem}>SPO2 <Text style={s.bold}>{mockVitals.spo2}</Text></Text>
-              <View style={s.divider} />
-              <Text style={s.vitalsInfoItem}>Allergies: <Text style={{ color: '#999' }}>Smoke Allergie</Text></Text>
+              <View style={[s.divider, { backgroundColor: colors.border }]} />
+              <Text style={[s.vitalsInfoItem, { color: colors.mutedText }]}>{t('Allergies')}: <Text style={{ color: colors.mutedText }}>Smoke Allergie</Text></Text>
             </View>
           )}
 
           {/* Notes from desks */}
-          <View style={s.notesCard}>
-            <View style={s.noteCardRow}><Ionicons name="document-text-outline" size={16} color="#999" /><Text style={s.noteCardTitle}>Notes from Registration Desk</Text></View>
-            <Text style={s.noteCardContent}>Patient felt dizziy earlier today</Text>
-            <View style={s.divider} />
-            <View style={s.noteCardRow}><Ionicons name="document-text-outline" size={16} color="#999" /><Text style={s.noteCardTitle}>Notes from Vital Desk</Text></View>
-            <Text style={s.noteCardContent}>Patient felt dizziy earlier today</Text>
+          <View style={[s.notesCard, { backgroundColor: colors.surface }]}> 
+            <View style={s.noteCardRow}><Ionicons name="document-text-outline" size={16} color={colors.mutedText} /><Text style={[s.noteCardTitle, { color: colors.text }]}>{t('Notes from Registration Desk')}</Text></View>
+            <Text style={[s.noteCardContent, { color: colors.mutedText }]}>Patient felt dizziy earlier today</Text>
+            <View style={[s.divider, { backgroundColor: colors.border }]} />
+            <View style={s.noteCardRow}><Ionicons name="document-text-outline" size={16} color={colors.mutedText} /><Text style={[s.noteCardTitle, { color: colors.text }]}>{t('Notes from Vital Desk')}</Text></View>
+            <Text style={[s.noteCardContent, { color: colors.mutedText }]}>Patient felt dizziy earlier today</Text>
           </View>
 
           {/* Prescribed Medicines Checklist */}
           <View style={{ marginTop: 24 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#111' }}>Prescribed Medicines</Text>
-              <View style={s.medCountBadge}><Text style={s.medCountText}>{mockMedicines.length}</Text></View>
+              <Text style={{ fontSize: 15, fontWeight: 'bold', color: colors.text }}>{t('Prescribed Medicines')}</Text>
+              <View style={[s.medCountBadge, { backgroundColor: colors.subSurface }]}><Text style={[s.medCountText, { color: colors.mutedText }]}>{mockMedicines.length}</Text></View>
             </View>
 
             {/* Table header */}
-            <View style={s.tableHeader}>
-              <Text style={[s.tableHeaderText, { flex: 1 }]}>Medicine Name</Text>
-              <Text style={[s.tableHeaderText, { width: 80, textAlign: 'center' }]}>Dosage</Text>
+            <View style={[s.tableHeader, { borderBottomColor: colors.border }]}> 
+              <Text style={[s.tableHeaderText, { flex: 1, color: colors.mutedText }]}>{t('Medicine Name')}</Text>
+              <Text style={[s.tableHeaderText, { width: 80, textAlign: 'center', color: colors.mutedText }]}>{t('Dosage')}</Text>
               <Text style={[s.tableHeaderText, { width: 40 }]} />
             </View>
 
             {mockMedicines.map((med) => (
-              <View key={med.id} style={s.medItem}>
+              <View key={med.id} style={[s.medItem, { borderBottomColor: colors.border }]}> 
                 <View style={{ flex: 1 }}>
-                  <Text style={s.medName}>({med.id}) {med.name}</Text>
+                  <Text style={[s.medName, { color: colors.text }]}>({med.id}) {med.name}</Text>
                 </View>
-                <Text style={s.medDosage}>{med.dosage}</Text>
-                <Text style={s.medDays}>{med.days} Days</Text>
+                <Text style={[s.medDosage, { color: colors.text }]}>{med.dosage}</Text>
+                <Text style={[s.medDays, { color: colors.text }]}>{med.days} {t('Days')}</Text>
                 <TouchableOpacity style={[s.medCheck, checkedMeds.has(med.id) && s.medCheckActive]} onPress={() => toggleMed(med.id)}>
                   {checkedMeds.has(med.id) && <Ionicons name="checkmark" size={16} color="#fff" />}
                 </TouchableOpacity>
@@ -197,18 +199,18 @@ const MedicineCounter = () => {
           </View>
 
           {/* Doctor Notes */}
-          <View style={s.notesCard}>
-            <View style={s.noteCardRow}><MaterialCommunityIcons name="stethoscope" size={18} color="#999" /><Text style={{ fontSize: 15, fontWeight: 'bold', color: '#111' }}>Notes from Doctor</Text></View>
+          <View style={[s.notesCard, { backgroundColor: colors.surface }]}> 
+            <View style={s.noteCardRow}><MaterialCommunityIcons name="stethoscope" size={18} color={colors.mutedText} /><Text style={{ fontSize: 15, fontWeight: 'bold', color: colors.text }}>{t('Notes from Doctor')}</Text></View>
             {mockDoctorNotes.map((note, i) => (
-              <Text key={i} style={s.doctorNoteItem}>• {note}</Text>
+              <Text key={i} style={[s.doctorNoteItem, { color: colors.mutedText }]}>• {note}</Text>
             ))}
           </View>
         </ScrollView>
 
-        <View style={s.bottomBar}>
+        <View style={[s.bottomBar, { backgroundColor: colors.surface, borderTopColor: colors.border }]}> 
           <TouchableOpacity style={[s.primaryBtn, !allChecked && s.primaryBtnDisabled]} disabled={!allChecked} onPress={handleMarkDone} activeOpacity={0.85}>
             <Ionicons name="checkmark" size={18} color="#fff" />
-            <Text style={s.primaryBtnText}>Mark as Done</Text>
+            <Text style={s.primaryBtnText}>{t('Mark as Done')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -217,16 +219,16 @@ const MedicineCounter = () => {
 
   // Queue Screen
   return (
-    <View style={s.root}>
-      <View style={s.simpleHeader}>
+    <View style={[s.root, { backgroundColor: colors.background }]}> 
+      <View style={[s.simpleHeader, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}> 
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color="#111" />
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={{ flex: 1, marginLeft: 12 }}>
-          <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#111' }}>Medicine Counter</Text>
-          <Text style={{ fontSize: 13, color: '#999', marginTop: 2 }}>{opdId}</Text>
+          <Text style={{ fontSize: 20, fontWeight: 'bold', color: colors.text }}>{t('Medicine Counter')}</Text>
+          <Text style={{ fontSize: 13, color: colors.mutedText, marginTop: 2 }}>{opdId}</Text>
         </View>
-        <TouchableOpacity><Ionicons name="ellipsis-vertical" size={20} color="#999" /></TouchableOpacity>
+        <TouchableOpacity><Ionicons name="ellipsis-vertical" size={20} color={colors.mutedText} /></TouchableOpacity>
       </View>
 
       {/* Teal Banner */}
@@ -235,35 +237,35 @@ const MedicineCounter = () => {
           <View style={s.bannerTop}>
             <View style={s.bannerTopLeft}>
               <View style={[s.pulseDot, { backgroundColor: '#5EEAD4' }]} />
-              <Text style={s.bannerLabel}>Ready for Medicines</Text>
+              <Text style={s.bannerLabel}>{t('Ready for Medicines')}</Text>
             </View>
             <View style={s.bannerBadge}>
               <Text style={[s.bannerBadgeNum, { color: '#0F766E' }]}>{inQueue} </Text>
-              <Text style={[s.bannerBadgeLabel, { color: '#0F766E' }]}>In Queue</Text>
+              <Text style={[s.bannerBadgeLabel, { color: '#0F766E' }]}>{t('In Queue')}</Text>
             </View>
           </View>
           <View style={s.bannerStats}>
-            <View style={s.bannerStat}><View style={[s.bannerBar, { backgroundColor: 'rgba(255,255,255,0.4)' }]} /><View><Text style={s.bannerStatNum}>{totalCases}</Text><Text style={s.bannerStatLabel}>Todays Total Case</Text></View></View>
-            <View style={s.bannerStat}><View style={[s.bannerBar, { backgroundColor: '#5EEAD4' }]} /><View><Text style={s.bannerStatNum}>{completed}</Text><Text style={s.bannerStatLabel}>Medicines Given</Text></View></View>
+            <View style={s.bannerStat}><View style={[s.bannerBar, { backgroundColor: 'rgba(255,255,255,0.4)' }]} /><View><Text style={s.bannerStatNum}>{totalCases}</Text><Text style={s.bannerStatLabel}>{t('Todays Total Case')}</Text></View></View>
+            <View style={s.bannerStat}><View style={[s.bannerBar, { backgroundColor: '#5EEAD4' }]} /><View><Text style={s.bannerStatNum}>{completed}</Text><Text style={s.bannerStatLabel}>{t('Medicines Given')}</Text></View></View>
           </View>
         </View>
       </View>
 
       <ScrollView style={{ flex: 1, paddingHorizontal: 20, paddingTop: 16 }}>
-        <View style={s.queueList}>
+        <View style={[s.queueList, { backgroundColor: colors.surface }]}> 
           {mockQueue.map((p) => {
             const done = givenDone.includes(p.token);
             return (
-              <TouchableOpacity key={p.token} style={[s.queueItem, done && { opacity: 0.5 }]} onPress={() => !done && handleSelectPatient(p)} disabled={done}>
-                <View style={s.queueToken}><Text style={s.queueTokenText}>{p.token}</Text></View>
+              <TouchableOpacity key={p.token} style={[s.queueItem, { borderBottomColor: colors.border }, done && { opacity: 0.5 }]} onPress={() => !done && handleSelectPatient(p)} disabled={done}>
+                <View style={[s.queueToken, { backgroundColor: colors.subSurface, borderColor: colors.border }]}><Text style={[s.queueTokenText, { color: colors.text }]}>{p.token}</Text></View>
                 <View style={{ flex: 1 }}>
-                  <Text style={s.queueName}>{p.name}</Text>
-                  <Text style={s.queueSub}>{p.id} • {p.gender} • {p.age} Yrs</Text>
+                  <Text style={[s.queueName, { color: colors.text }]}>{p.name}</Text>
+                  <Text style={[s.queueSub, { color: colors.mutedText }]}>{p.id} • {t(p.gender)} • {p.age} {t('Yrs')}</Text>
                 </View>
                 {done ? (
-                  <View style={s.doneBadge}><Text style={s.doneBadgeText}>Done</Text></View>
+                  <View style={s.doneBadge}><Text style={s.doneBadgeText}>{t('Done')}</Text></View>
                 ) : (
-                  <Ionicons name="chevron-forward" size={18} color="#999" />
+                  <Ionicons name="chevron-forward" size={18} color={colors.mutedText} />
                 )}
               </TouchableOpacity>
             );

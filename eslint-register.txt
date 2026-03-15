@@ -1,0 +1,39 @@
+﻿
+C:\Users\91798\setuSathi\src\pages\RegisterPatient.tsx
+    4:20   error    'MaterialCommunityIcons' is defined but never used                                                         @typescript-eslint/no-unused-vars
+   70:27   warning  Missing radix parameter                                                                                    radix
+   70:47   warning  Missing radix parameter                                                                                    radix
+  119:14   warning  Missing radix parameter                                                                                    radix
+  143:64   warning  Inline style: { paddingBottom: 100 }                                                                       react-native/no-inline-styles
+  216:37   warning  Inline style: {
+  flex: 1,
+  opacity: 'noDob ? 0.5 : 1',
+  flexDirection: 'row',
+  alignItems: 'center'
+}  react-native/no-inline-styles
+  221:82   warning  Inline style: { marginRight: 10 }                                                                          react-native/no-inline-styles
+  222:28   warning  Inline style: { fontSize: 15, color: "dob ? '#111' : '#999'" }                                             react-native/no-inline-styles
+  227:37   warning  Inline style: { width: 80, marginLeft: 10, opacity: 'noDob ? 1 : 0.5' }                                    react-native/no-inline-styles
+  263:83   warning  Inline style: { marginRight: 10 }                                                                          react-native/no-inline-styles
+  282:77   warning  Inline style: { marginRight: 10, marginTop: 2 }                                                            react-native/no-inline-styles
+  284:46   warning  Inline style: { minHeight: 80, textAlignVertical: 'top' }                                                  react-native/no-inline-styles
+  303:77   warning  Inline style: { marginRight: 8 }                                                                           react-native/no-inline-styles
+  322:25   warning  Missing radix parameter                                                                                    radix
+  323:25   warning  Missing radix parameter                                                                                    radix
+  333:29   warning  Missing radix parameter                                                                                    radix
+  333:49   warning  Missing radix parameter                                                                                    radix
+  339:25   warning  Missing radix parameter                                                                                    radix
+  340:25   warning  Missing radix parameter                                                                                    radix
+  350:127  warning  Inline style: { paddingHorizontal: 8 }                                                                     react-native/no-inline-styles
+  371:56   warning  Missing radix parameter                                                                                    radix
+  371:77   warning  Missing radix parameter                                                                                    radix
+  374:52   warning  Missing radix parameter                                                                                    radix
+  374:73   warning  Missing radix parameter                                                                                    radix
+  377:51   warning  Missing radix parameter                                                                                    radix
+  378:50   warning  Missing radix parameter                                                                                    radix
+  379:43   warning  Missing radix parameter                                                                                    radix
+  379:63   warning  Missing radix parameter                                                                                    radix
+  388:104  warning  Inline style: { color: '#ccc' }                                                                            react-native/no-inline-styles
+
+Γ£û 29 problems (1 error, 28 warnings)
+

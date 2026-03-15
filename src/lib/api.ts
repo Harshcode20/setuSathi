@@ -72,23 +72,46 @@ export const authService = {
   },
 
   /**
-   * Register a new doctor account.
+   * Register a new account (doctor or volunteer).
    */
-  register: async (email: string, password: string, fullName: string, doctorId: string) => {
+  register: async (
+    email: string,
+    password: string,
+    fullName: string,
+    memberId: string,
+    mobile: string,
+    photoUri?: string | null,
+    role: 'doctor' | 'volunteer' = 'doctor',
+  ) => {
     const hasValidFirebaseConfig = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_FIREBASE_API_KEY';
 
     if (hasValidFirebaseConfig && USE_BACKEND) {
-      const userCred = await createUserWithEmailAndPassword(auth, email, password);
-      await updateProfile(userCred.user, { displayName: fullName });
-      await setDoc(doc(db, 'doctors', userCred.user.uid), {
-        fullName,
-        doctorId,
-        email,
-        createdAt: new Date().toISOString(),
-      });
+      // Suppress auth listener so dashboard doesn't flash
+      const { setRegistering } = require('./AuthContext');
+      setRegistering(true);
+      try {
+        const userCred = await createUserWithEmailAndPassword(auth, email, password);
+        await updateProfile(userCred.user, {
+          displayName: fullName,
+          ...(photoUri ? { photoURL: photoUri } : {}),
+        });
+        await setDoc(doc(db, 'users', userCred.user.uid), {
+          fullName,
+          memberId,
+          email,
+          mobile,
+          photoUri: photoUri || '',
+          role,
+          createdAt: new Date().toISOString(),
+        });
+        // Sign out so the user is redirected to Login instead of auto-entering dashboard
+        await auth.signOut();
+      } finally {
+        setRegistering(false);
+      }
       return {
         success: true,
-        user: { id: userCred.user.uid, name: fullName, email, doctorId },
+        user: { id: '', name: fullName, email, memberId, mobile, photoUri: photoUri || '', role },
       };
     }
 
@@ -96,18 +119,98 @@ export const authService = {
   },
 
   /**
-   * Get doctor profile from Firestore.
+   * Get user profile from Firestore (checks 'users' collection, falls back to 'doctors').
    */
-  getDoctorProfile: async (uid: string) => {
+  getUserProfile: async (uid: string) => {
     const hasValidFirebaseConfig = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_FIREBASE_API_KEY';
 
     if (hasValidFirebaseConfig && USE_BACKEND) {
-      const snap = await getDoc(doc(db, 'doctors', uid));
-      if (snap.exists()) {
-        return snap.data() as { fullName: string; doctorId: string; email: string };
+      const currentAuthUser = auth.currentUser;
+      // Check 'users' collection first
+      const userSnap = await getDoc(doc(db, 'users', uid));
+      if (userSnap.exists()) {
+        const data = userSnap.data();
+        return {
+          fullName: data.fullName || currentAuthUser?.displayName || '',
+          memberId: data.memberId || data.doctorId || '',
+          email: data.email || currentAuthUser?.email || '',
+          mobile: data.mobile || '',
+          photoUri: data.photoUri || data.photoURL || currentAuthUser?.photoURL || '',
+          role: data.role || 'doctor',
+        } as { fullName: string; memberId: string; email: string; mobile?: string; photoUri?: string; role: 'doctor' | 'volunteer' };
+      }
+      // Fallback: check legacy 'doctors' collection
+      const docSnap = await getDoc(doc(db, 'doctors', uid));
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        return {
+          fullName: data.fullName || currentAuthUser?.displayName || '',
+          memberId: data.doctorId || data.memberId || '',
+          email: data.email || currentAuthUser?.email || '',
+          mobile: data.mobile || '',
+          photoUri: data.photoUri || currentAuthUser?.photoURL || '',
+          role: 'doctor' as const,
+        };
       }
     }
     return null;
+  },
+
+  /**
+   * Update user profile fields in Firestore.
+   */
+  updateUserProfile: async (uid: string, updates: { fullName?: string; mobile?: string; photoUri?: string }) => {
+    const hasValidFirebaseConfig = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_FIREBASE_API_KEY';
+
+    if (hasValidFirebaseConfig && USE_BACKEND) {
+      const usersRef = doc(db, 'users', uid);
+      const doctorsRef = doc(db, 'doctors', uid);
+      const [usersSnap, doctorsSnap] = await Promise.all([getDoc(usersRef), getDoc(doctorsRef)]);
+
+      const baseData = usersSnap.exists()
+        ? usersSnap.data()
+        : doctorsSnap.exists()
+          ? doctorsSnap.data()
+          : {};
+
+      const authUser = auth.currentUser;
+      const normalizedUserPayload = {
+        fullName: updates.fullName ?? baseData.fullName ?? authUser?.displayName ?? '',
+        memberId: baseData.memberId || baseData.doctorId || '',
+        email: baseData.email || authUser?.email || '',
+        mobile: updates.mobile ?? baseData.mobile ?? '',
+        photoUri: updates.photoUri ?? baseData.photoUri ?? baseData.photoURL ?? authUser?.photoURL ?? '',
+        role: baseData.role || 'doctor',
+        updatedAt: new Date().toISOString(),
+      };
+
+      const writes: Array<Promise<unknown>> = [
+        setDoc(usersRef, normalizedUserPayload, { merge: true }),
+      ];
+
+      if (doctorsSnap.exists()) {
+        const doctorUpdates: Record<string, string> = {
+          updatedAt: new Date().toISOString(),
+        };
+        if (typeof updates.fullName === 'string') doctorUpdates.fullName = updates.fullName;
+        if (typeof updates.mobile === 'string') doctorUpdates.mobile = updates.mobile;
+        if (typeof updates.photoUri === 'string') doctorUpdates.photoUri = updates.photoUri;
+
+        writes.push(setDoc(doctorsRef, doctorUpdates, { merge: true }));
+      }
+
+      await Promise.all(writes);
+      return { success: true };
+    }
+
+    return { success: true };
+  },
+
+  /**
+   * @deprecated Use getUserProfile instead
+   */
+  getDoctorProfile: async (uid: string) => {
+    return authService.getUserProfile(uid);
   },
 
   /**
@@ -249,17 +352,84 @@ export const patientService = {
 
 export const opdService = {
   /**
-   * Start a new OPD session.
+   * Start a new OPD session and save to Firestore.
+   * Returns the opdId and 6-digit pin.
    */
-  start: async (data: { village: string; deskRole: string }) => {
-    if (!USE_BACKEND) {
-      return { success: true, opdId: `OPD-${data.village.toUpperCase()}-${Date.now()}`, pin: '123456' };
+  start: async (data: { village: string; deskRole: string; opdId: string; pin: string; createdBy?: string }) => {
+    const hasValidFirebaseConfig = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_FIREBASE_API_KEY';
+
+    if (hasValidFirebaseConfig && USE_BACKEND) {
+      await setDoc(doc(db, 'opd_sessions', data.pin), {
+        opdId: data.opdId,
+        pin: data.pin,
+        village: data.village,
+        deskRole: data.deskRole,
+        status: 'active',
+        patients: [],
+        createdBy: data.createdBy || '',
+        createdAt: new Date().toISOString(),
+      });
+      return { success: true, opdId: data.opdId, pin: data.pin };
     }
 
-    return apiFetch('/opd/start', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
+    // Demo mode
+    return { success: true, opdId: data.opdId, pin: data.pin };
+  },
+
+  /**
+   * Join an OPD session by 6-digit PIN.
+   * Returns the OPD session data if found.
+   */
+  joinByPin: async (pin: string) => {
+    const hasValidFirebaseConfig = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_FIREBASE_API_KEY';
+
+    if (hasValidFirebaseConfig && USE_BACKEND) {
+      const snap = await getDoc(doc(db, 'opd_sessions', pin));
+      if (snap.exists()) {
+        return snap.data() as {
+          opdId: string;
+          pin: string;
+          village: string;
+          deskRole: string;
+          status: string;
+          patients: Array<{ id: string; name: string; gender: string; age: number; token: number }>;
+          createdAt: string;
+        };
+      }
+      return null;
+    }
+
+    // Demo mode — return mock data
+    return {
+      opdId: `OPD-RAMAGRI-250622`,
+      pin,
+      village: 'Ramagri',
+      deskRole: 'registration',
+      status: 'active',
+      patients: [
+        { id: 'P1234', name: 'Dharamshinhbhai Prajapati', gender: 'Male', age: 58, token: 1 },
+        { id: 'P1235', name: 'Manguben Solanki', gender: 'Male', age: 58, token: 2 },
+        { id: 'P1236', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 3 },
+        { id: 'P1237', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 4 },
+        { id: 'P1238', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 5 },
+      ],
+      createdAt: new Date().toISOString(),
+    };
+  },
+
+  /**
+   * Add a patient to an OPD session in Firestore.
+   */
+  addPatientToSession: async (pin: string, patient: { id: string; name: string; gender: string; age: number; token: number }) => {
+    const hasValidFirebaseConfig = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_FIREBASE_API_KEY';
+
+    if (hasValidFirebaseConfig && USE_BACKEND) {
+      const { arrayUnion, updateDoc } = require('firebase/firestore');
+      await updateDoc(doc(db, 'opd_sessions', pin), {
+        patients: arrayUnion(patient),
+      });
+    }
+    return { success: true };
   },
 
   /**

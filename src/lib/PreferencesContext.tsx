@@ -1,0 +1,588 @@
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { useAuth } from './AuthContext';
+import { db } from './firebase';
+import { FIREBASE_CONFIG, USE_BACKEND } from './config';
+
+export type AppLanguage = 'en' | 'gu';
+export type AppTheme = 'light' | 'dark';
+
+type TranslationKey = string;
+
+const translations: Record<AppLanguage, Record<string, string>> = {
+  en: {
+    'nav.home': 'Home',
+    'nav.records': 'Records',
+    'nav.settings': 'Settings',
+    'settings.title': 'Settings',
+    'settings.language': 'Language',
+    'settings.languageHelp': 'Choose app language',
+    'settings.english': 'English',
+    'settings.gujarati': 'ગુજરાતી',
+    'settings.theme': 'Theme',
+    'settings.themeHelp': 'Switch between light and dark mode',
+    'settings.scopeNote': 'These settings apply to this logged-in account only.',
+    'settings.lightMode': 'Light Mode',
+    'settings.darkMode': 'Dark Mode',
+    'dashboard.opdStatistics': 'OPD Statistics',
+    'dashboard.quickActions': 'Quick Actions',
+    'dashboard.registerPatient': 'Register Patient',
+    'dashboard.startOpd': 'Start OPD',
+    'dashboard.totalOpds': 'Total OPDs',
+    'dashboard.totalPatients': 'Total Patients',
+    'dashboard.registered': 'Registered',
+    'dashboard.vitals': 'Vitals',
+    'dashboard.consults': 'Consults',
+    'dashboard.medicines': 'Medicines',
+    'dashboard.roleNotDefined': 'Not Defined',
+    'doctorDashboard.roleBadge': 'Tele-Consulting Doctor',
+    'doctorDashboard.pinTitle': 'Enter 6 Digit Code to Join OPD',
+    'doctorDashboard.joinOpd': 'Join OPD',
+    'doctorDashboard.statsPlaceholder1': 'Your OPD Statistics Will',
+    'doctorDashboard.statsPlaceholder2': 'Appear Here',
+
+    'Error': 'Error',
+    'Please enter your email and password.': 'Please enter your email and password.',
+    'Login Failed': 'Login Failed',
+    'Invalid credentials.': 'Invalid credentials.',
+    'Demo': 'Demo',
+    'Please enter your email address.': 'Please enter your email address.',
+    'Could not send reset link. Try again.': 'Could not send reset link. Try again.',
+    'Log In': 'Log In',
+    'Member ID': 'Member ID',
+    'Password': 'Password',
+    'Remember me': 'Remember me',
+    'Forgot Password?': 'Forgot Password?',
+    "Don't have an account?": "Don't have an account?",
+    'Register': 'Register',
+    'Having trouble? Contact': 'Having trouble? Contact',
+
+    'Please fill in all fields.': 'Please fill in all fields.',
+    'Passwords do not match.': 'Passwords do not match.',
+    'Password must be at least 6 characters.': 'Password must be at least 6 characters.',
+    'Registration successful! Please log in.': 'Registration successful! Please log in.',
+    'This email is already registered.': 'This email is already registered.',
+    'Registration failed. Please try again.': 'Registration failed. Please try again.',
+    'Create Account': 'Create Account',
+    'Select your role and register': 'Select your role and register',
+    'Doctor': 'Doctor',
+    'Volunteer': 'Volunteer',
+    'Full Name': 'Full Name',
+    'Doctor ID (e.g. D0024)': 'Doctor ID (e.g. D0024)',
+    'Volunteer ID (e.g. V1234)': 'Volunteer ID (e.g. V1234)',
+    'Email Address': 'Email Address',
+    'Confirm Password': 'Confirm Password',
+    'Register as': 'Register as',
+    'Already have an account?': 'Already have an account?',
+
+    'Patient Records': 'Patient Records',
+    'patients registered': 'patients registered',
+    'Search by name or ID...': 'Search by name or ID...',
+    'results found': 'results found',
+    'All patients': 'All patients',
+    'Last': 'Last',
+    'No patients found': 'No patients found',
+    'Try a different search term': 'Try a different search term',
+
+    'Page not found': 'Page not found',
+    "Sorry, we couldn't find the page you're looking for.": "Sorry, we couldn't find the page you're looking for.",
+    'Back to Dashboard': 'Back to Dashboard',
+    'Loading...': 'Loading...',
+
+    '6 Digit PIN': '6 Digit PIN',
+    'Add Note': 'Add Note',
+    'Add Patient Photo': 'Add Patient Photo',
+    'Additional Notes': 'Additional Notes',
+    'Address': 'Address',
+    'All': 'All',
+    'Allergies': 'Allergies',
+    'Ask your Registration Desk teammate to share 6 digit PIN with you': 'Ask your Registration Desk teammate to share 6 digit PIN with you',
+    'Ask your team to Enter this code to begin their OPD': 'Ask your team to Enter this code to begin their OPD',
+    'Cardiac': 'Cardiac',
+    'Change Photo': 'Change Photo',
+    'Complete & Take Next Patient': 'Complete & Take Next Patient',
+    'Consult Done': 'Consult Done',
+    'Consultation Complete': 'Consultation Complete',
+    'Consultation for Token': 'Consultation for Token',
+    'consultation submitted successfully.': 'consultation submitted successfully.',
+    'Consulting Patient': 'Consulting Patient',
+    'Contact and Address': 'Contact and Address',
+    'Continue to Desk Selection': 'Continue to Desk Selection',
+    'Continue to Final Step': 'Continue to Final Step',
+    'Could not register patient. Please try again.': 'Could not register patient. Please try again.',
+    'Date of Birth': 'Date of Birth',
+    'Days': 'Days',
+    'days': 'days',
+    'Demographic Details': 'Demographic Details',
+    'Dental': 'Dental',
+    'Diabetes': 'Diabetes',
+    'Does this patient required a Follow-up visit?': 'Does this patient required a Follow-up visit?',
+    'Done': 'Done',
+    'Dosage': 'Dosage',
+    'Enter OPD Code to Join': 'Enter OPD Code to Join',
+    'Eye': 'Eye',
+    'Female': 'Female',
+    'Follow-up Recommendation': 'Follow-up Recommendation',
+    'Full Name (as per ID)': 'Full Name (as per ID)',
+    'Gastric': 'Gastric',
+    'Generate Token': 'Generate Token',
+    'Generated': 'Generated',
+    'Go Register New Patient': 'Go Register New Patient',
+    'has already started the OPD session for this location. Please enter the 6-digit PIN to begin.': 'has already started the OPD session for this location. Please enter the 6-digit PIN to begin.',
+    'has already started the OPD session. Please enter the 6-digit PIN to begin.': 'has already started the OPD session. Please enter the 6-digit PIN to begin.',
+    'has been registered with': 'has been registered with',
+    'Height': 'Height',
+    'In Queue': 'In Queue',
+    'Infection': 'Infection',
+    'is complete.': 'is complete.',
+    'Join OPD': 'Join OPD',
+    'Labtest Investigation': 'Labtest Investigation',
+    'Male': 'Male',
+    'Mark as Done': 'Mark as Done',
+    'Marked for Vitals': 'Marked for Vitals',
+    'Medicine Counter': 'Medicine Counter',
+    'Medicine Name': 'Medicine Name',
+    'medicines dispensed successfully.': 'medicines dispensed successfully.',
+    'Medicines Given': 'Medicines Given',
+    'Mobile Number': 'Mobile Number',
+    'New Case': 'New Case',
+    'Next: Prescribe Medicines': 'Next: Prescribe Medicines',
+    'No complaints recorded': 'No complaints recorded',
+    'No notes': 'No notes',
+    'No patients in queue yet': 'No patients in queue yet',
+    'No vitals recorded yet': 'No vitals recorded yet',
+    'None reported': 'None reported',
+    'Note': 'Note',
+    'Notes from Doctor': 'Notes from Doctor',
+    'Notes from Registration Desk': 'Notes from Registration Desk',
+    'Notes from Vital Desk': 'Notes from Vital Desk',
+    'Notes from Vitals Desk': 'Notes from Vitals Desk',
+    'OPD Started': 'OPD Started',
+    'Other Desk Status': 'Other Desk Status',
+    'Other Diagnosis': 'Other Diagnosis',
+    'Other Info.': 'Other Info.',
+    'Other Lab-test': 'Other Lab-test',
+    'Pain': 'Pain',
+    'Patient': 'Patient',
+    'Patient Complaints': 'Patient Complaints',
+    'Patient Diagnosis': 'Patient Diagnosis',
+    'Patient Identity': 'Patient Identity',
+    'Patient Info.': 'Patient Info.',
+    'Patient Prescription': 'Patient Prescription',
+    'Patient registered successfully!': 'Patient registered successfully!',
+    'patients found': 'patients found',
+    'Patients will appear here once the volunteer registers them': 'Patients will appear here once the volunteer registers them',
+    'Permission needed': 'Permission needed',
+    'Please allow access to your photo library.': 'Please allow access to your photo library.',
+    'Prescribe Medicines': 'Prescribe Medicines',
+    'Prescribed Medicines': 'Prescribed Medicines',
+    'Prev': 'Prev',
+    'Ready for Doctor': 'Ready for Doctor',
+    'Ready for Medicines': 'Ready for Medicines',
+    'Ready for Vitals': 'Ready for Vitals',
+    'Record Vitals': 'Record Vitals',
+    'Recorded Vitals': 'Recorded Vitals',
+    'Register New': 'Register New',
+    'Register New Patient': 'Register New Patient',
+    'Register Patient': 'Register Patient',
+    'Registration desk': 'Registration desk',
+    'Registration Desk': 'Registration Desk',
+    'Registration Failed': 'Registration Failed',
+    'Require Lab Tests?': 'Require Lab Tests?',
+    'Search for an existing patient or register a new one to create a case.': 'Search for an existing patient or register a new one to create a case.',
+    'Search medicines': 'Search medicines',
+    'Search patient name...': 'Search patient name...',
+    'Select Date of Birth': 'Select Date of Birth',
+    'Select Disease': 'Select Disease',
+    'Select Medicines': 'Select Medicines',
+    'Select Village': 'Select Village',
+    'Select village where you are operating your OPD now': 'Select village where you are operating your OPD now',
+    'Select Your Desk Role': 'Select Your Desk Role',
+    'Selected Medicines': 'Selected Medicines',
+    'Start OPD': 'Start OPD',
+    'Start Patient Visit': 'Start Patient Visit',
+    'Step': 'Step',
+    'symptom(s).': 'symptom(s).',
+    'Symptoms recorded during registration will appear here.': 'Symptoms recorded during registration will appear here.',
+    'Tap + to add medicines': 'Tap + to add medicines',
+    'Tap to change photo': 'Tap to change photo',
+    'Tap to upload patient photo': 'Tap to upload patient photo',
+    'Tick only if lab tests are required for this patient.': 'Tick only if lab tests are required for this patient.',
+    'Timing': 'Timing',
+    'Todays Total Case': 'Todays Total Case',
+    'Token': 'Token',
+    'Upcoming Patients': 'Upcoming Patients',
+    'Vitals': 'Vitals',
+    'vitals completed successfully.': 'vitals completed successfully.',
+    'Vitals Desk': 'Vitals Desk',
+    'Vitals Done': 'Vitals Done',
+    'Vitals Recorded': 'Vitals Recorded',
+    'Visit History': 'Visit History',
+    'Consulted by': 'Consulted by',
+    'No history available': 'No history available',
+    'Weight': 'Weight',
+    'Yrs': 'Yrs',
+  },
+  gu: {
+    'nav.home': 'હોમ',
+    'nav.records': 'રેકોર્ડ્સ',
+    'nav.settings': 'સેટિંગ્સ',
+    'settings.title': 'સેટિંગ્સ',
+    'settings.language': 'ભાષા',
+    'settings.languageHelp': 'એપ ભાષા પસંદ કરો',
+    'settings.english': 'English',
+    'settings.gujarati': 'ગુજરાતી',
+    'settings.theme': 'થીમ',
+    'settings.themeHelp': 'લાઇટ અને ડાર્ક મોડ બદલો',
+    'settings.scopeNote': 'આ સેટિંગ્સ ફક્ત હાલના લૉગિન એકાઉન્ટ માટે જ લાગુ પડે છે.',
+    'settings.lightMode': 'લાઇટ મોડ',
+    'settings.darkMode': 'ડાર્ક મોડ',
+    'dashboard.opdStatistics': 'OPD આંકડા',
+    'dashboard.quickActions': 'ઝડપી ક્રિયાઓ',
+    'dashboard.registerPatient': 'દર્દી નોંધણી',
+    'dashboard.startOpd': 'OPD શરૂ કરો',
+    'dashboard.totalOpds': 'કુલ OPD',
+    'dashboard.totalPatients': 'કુલ દર્દીઓ',
+    'dashboard.registered': 'નોંધાયેલા',
+    'dashboard.vitals': 'વાઇટલ્સ',
+    'dashboard.consults': 'કન્સલ્ટ',
+    'dashboard.medicines': 'દવાઓ',
+    'dashboard.roleNotDefined': 'નિર્ધારિત નથી',
+    'doctorDashboard.roleBadge': 'ટેલી-કન્સલ્ટિંગ ડૉક્ટર',
+    'doctorDashboard.pinTitle': 'OPD જોડાવા માટે 6 અંકનો કોડ નાખો',
+    'doctorDashboard.joinOpd': 'OPD જોડાઓ',
+    'doctorDashboard.statsPlaceholder1': 'તમારા OPD આંકડા',
+    'doctorDashboard.statsPlaceholder2': 'અહીં દેખાશે',
+
+    'Error': 'ભૂલ',
+    'Please enter your email and password.': 'કૃપા કરીને ઈમેલ અને પાસવર્ડ દાખલ કરો.',
+    'Login Failed': 'લોગિન નિષ્ફળ',
+    'Invalid credentials.': 'અમાન્ય ઓળખ માહિતી.',
+    'Demo': 'ડેમો',
+    'Please enter your email address.': 'કૃપા કરીને તમારું ઈમેલ દાખલ કરો.',
+    'Could not send reset link. Try again.': 'રીસેટ લિંક મોકલી શકાઈ નહીં. ફરી પ્રયાસ કરો.',
+    'Log In': 'લોગિન',
+    'Member ID': 'સભ્ય ID',
+    'Password': 'પાસવર્ડ',
+    'Remember me': 'મને યાદ રાખો',
+    'Forgot Password?': 'પાસવર્ડ ભૂલી ગયા?',
+    "Don't have an account?": 'એકાઉન્ટ નથી?',
+    'Register': 'રજીસ્ટર',
+    'Having trouble? Contact': 'મુશ્કેલી છે? સંપર્ક કરો',
+
+    'Please fill in all fields.': 'કૃપા કરીને બધી વિગતો ભરો.',
+    'Passwords do not match.': 'પાસવર્ડ સરખા નથી.',
+    'Password must be at least 6 characters.': 'પાસવર્ડ ઓછામાં ઓછો 6 અક્ષરનો હોવો જોઈએ.',
+    'Registration successful! Please log in.': 'નોંધણી સફળ! કૃપા કરીને લોગિન કરો.',
+    'This email is already registered.': 'આ ઈમેલ પહેલેથી નોંધાયેલ છે.',
+    'Registration failed. Please try again.': 'નોંધણી નિષ્ફળ. કૃપા કરીને ફરી પ્રયાસ કરો.',
+    'Create Account': 'એકાઉન્ટ બનાવો',
+    'Select your role and register': 'તમારી ભૂમિકા પસંદ કરો અને નોંધણી કરો',
+    'Doctor': 'ડૉક્ટર',
+    'Volunteer': 'સેવક',
+    'Full Name': 'પૂર્ણ નામ',
+    'Doctor ID (e.g. D0024)': 'ડૉક્ટર ID (દા.ત. D0024)',
+    'Volunteer ID (e.g. V1234)': 'સેવક ID (દા.ત. V1234)',
+    'Email Address': 'ઈમેલ સરનામું',
+    'Confirm Password': 'પાસવર્ડ ખાતરી કરો',
+    'Register as': 'રૂપે રજીસ્ટર કરો',
+    'Already have an account?': 'પહેલેથી એકાઉન્ટ છે?',
+
+    'Patient Records': 'દર્દી રેકોર્ડ્સ',
+    'patients registered': 'દર્દીઓ નોંધાયેલા',
+    'Search by name or ID...': 'નામ અથવા IDથી શોધો...',
+    'results found': 'પરિણામ મળ્યા',
+    'All patients': 'બધા દર્દીઓ',
+    'Last': 'છેલ્લી મુલાકાત',
+    'No patients found': 'કોઈ દર્દી મળ્યો નથી',
+    'Try a different search term': 'બીજો શબ્દ અજમાવો',
+
+    'Page not found': 'પેજ મળ્યું નથી',
+    "Sorry, we couldn't find the page you're looking for.": 'માફ કરશો, તમે શોધી રહ્યા છો તે પેજ મળ્યું નથી.',
+    'Back to Dashboard': 'ડેશબોર્ડ પર પાછા જાઓ',
+    'Loading...': 'લોડ થઈ રહ્યું છે...',
+
+    '6 Digit PIN': '6 અંકનો PIN',
+    'Add Note': 'નોંધ ઉમેરો',
+    'Add Patient Photo': 'દર્દીનો ફોટો ઉમેરો',
+    'Additional Notes': 'વધારાની નોંધો',
+    'Address': 'સરનામું',
+    'All': 'બધું',
+    'Allergies': 'એલર્જી',
+    'Ask your Registration Desk teammate to share 6 digit PIN with you': 'તમારા રજીસ્ટ્રેશન ડેસ્ક સાથીને 6 અંકનો PIN શેર કરવા કહો',
+    'Ask your team to Enter this code to begin their OPD': 'તમારી ટીમને તેમની OPD શરૂ કરવા આ કોડ દાખલ કરવા કહો',
+    'Cardiac': 'હૃદય',
+    'Change Photo': 'ફોટો બદલો',
+    'Complete & Take Next Patient': 'પૂર્ણ કરો અને આગળનો દર્દી લો',
+    'Consult Done': 'કન્સલ્ટ પૂર્ણ',
+    'Consultation Complete': 'કન્સલ્ટેશન પૂર્ણ',
+    'Consultation for Token': 'ટોકન માટે કન્સલ્ટેશન',
+    'consultation submitted successfully.': 'કન્સલ્ટેશન સફળતાપૂર્વક સબમિટ થયું.',
+    'Consulting Patient': 'દર્દી કન્સલ્ટિંગ',
+    'Contact and Address': 'સંપર્ક અને સરનામું',
+    'Continue to Desk Selection': 'ડેસ્ક પસંદગી તરફ આગળ વધો',
+    'Continue to Final Step': 'અંતિમ પગથિયા તરફ આગળ વધો',
+    'Could not register patient. Please try again.': 'દર્દીની નોંધણી થઈ શકી નહીં. કૃપા કરીને ફરી પ્રયાસ કરો.',
+    'Date of Birth': 'જન્મ તારીખ',
+    'Days': 'દિવસ',
+    'days': 'દિવસ',
+    'Demographic Details': 'લોકગણતરી વિગતો',
+    'Dental': 'દાંત',
+    'Diabetes': 'ડાયાબિટીસ',
+    'Does this patient required a Follow-up visit?': 'શું આ દર્દીને ફૉલો-અપ મુલાકાત જરૂરી છે?',
+    'Done': 'પૂર્ણ',
+    'Dosage': 'ડોઝ',
+    'Enter OPD Code to Join': 'જોડાવવા OPD કોડ દાખલ કરો',
+    'Eye': 'આંખ',
+    'Female': 'સ્ત્રી',
+    'Follow-up Recommendation': 'ફૉલો-અપ ભલામણ',
+    'Full Name (as per ID)': 'પૂર્ણ નામ (ID મુજબ)',
+    'Gastric': 'ગેસ્ટ્રિક',
+    'Generate Token': 'ટોકન જનરેટ કરો',
+    'Generated': 'જનરેટ થયું',
+    'Go Register New Patient': 'નવા દર્દીની નોંધણી કરો',
+    'has already started the OPD session for this location. Please enter the 6-digit PIN to begin.': 'આ સ્થળ માટે OPD સત્ર પહેલેથી શરૂ થયું છે. શરૂ કરવા કૃપા કરીને 6 અંકનો PIN દાખલ કરો.',
+    'has already started the OPD session. Please enter the 6-digit PIN to begin.': 'OPD સત્ર પહેલેથી શરૂ થયું છે. શરૂ કરવા કૃપા કરીને 6 અંકનો PIN દાખલ કરો.',
+    'has been registered with': 'ને નોંધવામાં આવ્યો છે સાથે',
+    'Height': 'ઊંચાઈ',
+    'In Queue': 'કતારમાં',
+    'Infection': 'ચેપ',
+    'is complete.': 'પૂર્ણ થયું છે.',
+    'Join OPD': 'OPD જોડાઓ',
+    'Labtest Investigation': 'લૅબ ટેસ્ટ તપાસ',
+    'Male': 'પુરુષ',
+    'Mark as Done': 'પૂર્ણ તરીકે નિશાન કરો',
+    'Marked for Vitals': 'વાઇટલ્સ માટે નિશાનિત',
+    'Medicine Counter': 'દવા કાઉન્ટર',
+    'Medicine Name': 'દવાનું નામ',
+    'medicines dispensed successfully.': 'દવાઓ સફળતાપૂર્વક આપવામાં આવી.',
+    'Medicines Given': 'આપેલી દવાઓ',
+    'Mobile Number': 'મોબાઇલ નંબર',
+    'New Case': 'નવો કેસ',
+    'Next: Prescribe Medicines': 'આગળ: દવાઓ લખો',
+    'No complaints recorded': 'કોઈ ફરિયાદ નોંધાઈ નથી',
+    'No notes': 'કોઈ નોંધ નથી',
+    'No patients in queue yet': 'હજુ કતારમાં કોઈ દર્દી નથી',
+    'No vitals recorded yet': 'હજુ વાઇટલ્સ નોંધાયા નથી',
+    'None reported': 'કોઈ નથી',
+    'Note': 'નોંધ',
+    'Notes from Doctor': 'ડૉક્ટરની નોંધો',
+    'Notes from Registration Desk': 'રજીસ્ટ્રેશન ડેસ્કની નોંધો',
+    'Notes from Vital Desk': 'વાઇટલ ડેસ્કની નોંધો',
+    'Notes from Vitals Desk': 'વાઇટલ્સ ડેસ્કની નોંધો',
+    'OPD Started': 'OPD શરૂ થયું',
+    'Other Desk Status': 'અન્ય ડેસ્ક સ્થિતિ',
+    'Other Diagnosis': 'અન્ય નિદાન',
+    'Other Info.': 'અન્ય માહિતી',
+    'Other Lab-test': 'અન્ય લૅબ ટેસ્ટ',
+    'Pain': 'દર્દ',
+    'Patient': 'દર્દી',
+    'Patient Complaints': 'દર્દીની ફરિયાદો',
+    'Patient Diagnosis': 'દર્દી નિદાન',
+    'Patient Identity': 'દર્દીની ઓળખ',
+    'Patient Info.': 'દર્દીની માહિતી',
+    'Patient Prescription': 'દર્દીની પ્રિસ્ક્રિપ્શન',
+    'Patient registered successfully!': 'દર્દી સફળતાપૂર્વક નોંધાયો!',
+    'patients found': 'દર્દીઓ મળ્યા',
+    'Patients will appear here once the volunteer registers them': 'સેવક નોંધણી કરે પછી દર્દીઓ અહીં દેખાશે',
+    'Permission needed': 'પરવાનગી જરૂરી',
+    'Please allow access to your photo library.': 'કૃપા કરીને તમારી ફોટો લાઇબ્રેરીનો ઍક્સેસ મંજૂર કરો.',
+    'Prescribe Medicines': 'દવાઓ લખો',
+    'Prescribed Medicines': 'લખેલી દવાઓ',
+    'Prev': 'પાછળ',
+    'Ready for Doctor': 'ડૉક્ટર માટે તૈયાર',
+    'Ready for Medicines': 'દવાઓ માટે તૈયાર',
+    'Ready for Vitals': 'વાઇટલ્સ માટે તૈયાર',
+    'Record Vitals': 'વાઇટલ્સ નોંધો',
+    'Recorded Vitals': 'નોંધાયેલા વાઇટલ્સ',
+    'Register New': 'નવું નોંધો',
+    'Register New Patient': 'નવો દર્દી નોંધો',
+    'Register Patient': 'દર્દી નોંધો',
+    'Registration desk': 'રજીસ્ટ્રેશન ડેસ્ક',
+    'Registration Desk': 'રજીસ્ટ્રેશન ડેસ્ક',
+    'Registration Failed': 'નોંધણી નિષ્ફળ',
+    'Require Lab Tests?': 'લૅબ ટેસ્ટ જરૂરી છે?',
+    'Search for an existing patient or register a new one to create a case.': 'હાલના દર્દીને શોધો અથવા નવો નોંધો અને કેસ બનાવો.',
+    'Search medicines': 'દવાઓ શોધો',
+    'Search patient name...': 'દર્દીનું નામ શોધો...',
+    'Select Date of Birth': 'જન્મ તારીખ પસંદ કરો',
+    'Select Disease': 'રોગ પસંદ કરો',
+    'Select Medicines': 'દવાઓ પસંદ કરો',
+    'Select Village': 'ગામ પસંદ કરો',
+    'Select village where you are operating your OPD now': 'તમે હાલમાં જ્યાં OPD ચલાવી રહ્યા છો તે ગામ પસંદ કરો',
+    'Select Your Desk Role': 'તમારી ડેસ્ક ભૂમિકા પસંદ કરો',
+    'Selected Medicines': 'પસંદ કરેલી દવાઓ',
+    'Start OPD': 'OPD શરૂ કરો',
+    'Start Patient Visit': 'દર્દી મુલાકાત શરૂ કરો',
+    'Step': 'પગથિયો',
+    'symptom(s).': 'લક્ષણ(ો).',
+    'Symptoms recorded during registration will appear here.': 'નોંધણી દરમિયાન નોંધાયેલા લક્ષણો અહીં દેખાશે.',
+    'Tap + to add medicines': 'દવા ઉમેરવા + દબાવો',
+    'Tap to change photo': 'ફોટો બદલવા ટૅપ કરો',
+    'Tap to upload patient photo': 'દર્દીનો ફોટો અપલોડ કરવા ટૅપ કરો',
+    'Tick only if lab tests are required for this patient.': 'ફક્ત ત્યારે જ ચેક કરો જ્યારે આ દર્દીને લૅબ ટેસ્ટ જરૂરી હોય.',
+    'Timing': 'સમય',
+    'Todays Total Case': 'આજના કુલ કેસ',
+    'Token': 'ટોકન',
+    'Upcoming Patients': 'આગામી દર્દીઓ',
+    'Vitals': 'વાઇટલ્સ',
+    'vitals completed successfully.': 'વાઇટલ્સ સફળતાપૂર્વક પૂર્ણ થયા.',
+    'Vitals Desk': 'વાઇટલ્સ ડેસ્ક',
+    'Vitals Done': 'વાઇટલ્સ પૂર્ણ',
+    'Vitals Recorded': 'વાઇટલ્સ નોંધાયા',
+    'Visit History': 'મુલાકાત ઇતિહાસ',
+    'Consulted by': 'દ્વારા તપાસ્યું',
+    'No history available': 'કોઈ ઇતિહાસ ઉપલબ્ધ નથી',
+    'Weight': 'વજન',
+    'Yrs': 'વર્ષ',
+  },
+};
+
+type ThemeColors = {
+  background: string;
+  surface: string;
+  text: string;
+  mutedText: string;
+  border: string;
+  subSurface: string;
+};
+
+const lightColors: ThemeColors = {
+  background: '#f5f5f5',
+  surface: '#ffffff',
+  text: '#111111',
+  mutedText: '#888888',
+  border: '#e5e5e5',
+  subSurface: '#f3f4f6',
+};
+
+const darkColors: ThemeColors = {
+  background: '#111827',
+  surface: '#1f2937',
+  text: '#f9fafb',
+  mutedText: '#9ca3af',
+  border: '#374151',
+  subSurface: '#111827',
+};
+
+type PreferencesContextType = {
+  language: AppLanguage;
+  setLanguage: (value: AppLanguage) => void;
+  theme: AppTheme;
+  setTheme: (value: AppTheme) => void;
+  toggleTheme: () => void;
+  colors: ThemeColors;
+  t: (key: TranslationKey) => string;
+};
+
+const PreferencesContext = createContext<PreferencesContextType | undefined>(undefined);
+
+type UserPreferences = {
+  language: AppLanguage;
+  theme: AppTheme;
+};
+
+const defaultPreferences: UserPreferences = {
+  language: 'en',
+  theme: 'light',
+};
+
+const isValidLanguage = (value: any): value is AppLanguage => value === 'en' || value === 'gu';
+const isValidTheme = (value: any): value is AppTheme => value === 'light' || value === 'dark';
+
+export const PreferencesProvider = ({ children }: { children: React.ReactNode }) => {
+  const { user, userProfile } = useAuth();
+
+  const [rolePreferences, setRolePreferences] = useState<Record<'doctor' | 'volunteer' | 'guest', UserPreferences>>({
+    doctor: defaultPreferences,
+    volunteer: defaultPreferences,
+    guest: defaultPreferences,
+  });
+  const [userPreferences, setUserPreferences] = useState<Record<string, UserPreferences>>({});
+
+  const currentRole: 'doctor' | 'volunteer' | 'guest' = userProfile?.role || 'guest';
+  const currentUserId = user?.uid || null;
+  const currentPreferences = currentUserId
+    ? (userPreferences[currentUserId] || rolePreferences[currentRole])
+    : rolePreferences[currentRole];
+
+  const hasValidFirebaseConfig = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_FIREBASE_API_KEY';
+
+  useEffect(() => {
+    const loadUserPreferences = async () => {
+      if (!currentUserId || !hasValidFirebaseConfig || !USE_BACKEND) return;
+      if (userPreferences[currentUserId]) return;
+
+      try {
+        const snap = await getDoc(doc(db, 'users', currentUserId));
+        if (!snap.exists()) return;
+
+        const rawPrefs = (snap.data() as any)?.preferences;
+        if (!rawPrefs) return;
+
+        const loadedLanguage = isValidLanguage(rawPrefs.language) ? rawPrefs.language : rolePreferences[currentRole].language;
+        const loadedTheme = isValidTheme(rawPrefs.theme) ? rawPrefs.theme : rolePreferences[currentRole].theme;
+
+        setUserPreferences((prev) => ({
+          ...prev,
+          [currentUserId]: { language: loadedLanguage, theme: loadedTheme },
+        }));
+      } catch (err) {
+        console.warn('Failed to load user preferences:', err);
+      }
+    };
+
+    loadUserPreferences();
+  }, [currentUserId, currentRole, hasValidFirebaseConfig, userPreferences, rolePreferences]);
+
+  const updatePreferences = useCallback((patch: Partial<UserPreferences>) => {
+    const nextPreferences: UserPreferences = {
+      language: patch.language || currentPreferences.language,
+      theme: patch.theme || currentPreferences.theme,
+    };
+
+    if (currentUserId) {
+      setUserPreferences((prev) => ({
+        ...prev,
+        [currentUserId]: nextPreferences,
+      }));
+
+      if (hasValidFirebaseConfig && USE_BACKEND) {
+        setDoc(doc(db, 'users', currentUserId), { preferences: nextPreferences }, { merge: true })
+          .catch((err) => console.warn('Failed to save user preferences:', err));
+      }
+      return;
+    }
+
+    setRolePreferences((prev) => ({
+      ...prev,
+      [currentRole]: nextPreferences,
+    }));
+  }, [currentPreferences, currentRole, currentUserId, hasValidFirebaseConfig]);
+
+  const setLanguage = useCallback((value: AppLanguage) => updatePreferences({ language: value }), [updatePreferences]);
+  const setTheme = useCallback((value: AppTheme) => updatePreferences({ theme: value }), [updatePreferences]);
+  const toggleTheme = useCallback(() => updatePreferences({ theme: currentPreferences.theme === 'light' ? 'dark' : 'light' }), [currentPreferences.theme, updatePreferences]);
+
+  const value = useMemo<PreferencesContextType>(() => ({
+    language: currentPreferences.language,
+    setLanguage,
+    theme: currentPreferences.theme,
+    setTheme,
+    toggleTheme,
+    colors: currentPreferences.theme === 'dark' ? darkColors : lightColors,
+    t: (key: TranslationKey) => (
+      translations[currentPreferences.language][key]
+      || translations.en[key]
+      || key
+    ),
+  }), [currentPreferences, setLanguage, setTheme, toggleTheme]);
+
+  return <PreferencesContext.Provider value={value}>{children}</PreferencesContext.Provider>;
+};
+
+export const usePreferences = () => {
+  const ctx = useContext(PreferencesContext);
+  if (!ctx) throw new Error('usePreferences must be used within PreferencesProvider');
+  return ctx;
+};

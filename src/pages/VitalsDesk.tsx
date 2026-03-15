@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { usePreferences } from '../lib/PreferencesContext';
 
 const mockQueue = [
   { id: 'P1234', name: 'Dharamshinhbhai Prajapati', gender: 'Male', age: 58, token: 1 },
@@ -16,6 +17,7 @@ type ViewState = 'pin' | 'queue' | 'record';
 
 const VitalsDesk = () => {
   const navigation = useNavigation();
+  const { t, colors } = usePreferences();
   const pinRefs = useRef<Array<TextInput | null>>([]);
 
   const [view, setView] = useState<ViewState>('pin');
@@ -69,7 +71,7 @@ const VitalsDesk = () => {
   const handleComplete = () => {
     if (activePatient) {
       setVitalsDone((prev) => [...prev, activePatient.token]);
-      Alert.alert('Vitals Recorded', `${activePatient.name} vitals completed successfully.`);
+      Alert.alert(t('Vitals Recorded'), `${activePatient.name} ${t('vitals completed successfully.')}`);
       setActivePatient(null);
       setView('queue');
     }
@@ -78,19 +80,19 @@ const VitalsDesk = () => {
   // PIN Entry Screen
   if (view === 'pin') {
     return (
-      <View style={styles.root}>
+      <View style={[styles.root, { backgroundColor: colors.background }]}>
         <View style={styles.simpleHeader}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#111" />
           </TouchableOpacity>
-          <Text style={styles.simpleHeaderTitle}>Vitals Desk</Text>
+          <Text style={styles.simpleHeaderTitle}>{t('Vitals Desk')}</Text>
         </View>
 
         <View style={styles.pinCenter}>
           <Text style={{ fontSize: 48, marginBottom: 16 }}>🔒</Text>
-          <Text style={styles.pinTitle}>Enter OPD Code to Join</Text>
+          <Text style={styles.pinTitle}>{t('Enter OPD Code to Join')}</Text>
           <Text style={styles.pinSub}>
-            <Text style={{ fontWeight: '600' }}>Registration desk</Text> has already started the OPD session for this location. Please enter the 6-digit PIN to begin.
+            <Text style={{ fontWeight: '600' }}>{t('Registration desk')}</Text> {t('has already started the OPD session for this location. Please enter the 6-digit PIN to begin.')}
           </Text>
 
           <View style={styles.pinRow}>
@@ -116,15 +118,15 @@ const VitalsDesk = () => {
             onPress={handleJoinOPD}
             activeOpacity={0.85}
           >
-            <Text style={styles.primaryBtnText}>Join OPD</Text>
+            <Text style={styles.primaryBtnText}>{t('Join OPD')}</Text>
             <Ionicons name="arrow-forward" size={18} color="#fff" />
           </TouchableOpacity>
           <View style={styles.noteRow}>
             <View style={styles.noteLine} />
-            <Text style={styles.noteLabel}>Note</Text>
+            <Text style={styles.noteLabel}>{t('Note')}</Text>
             <View style={styles.noteLine} />
           </View>
-          <Text style={styles.noteText}>Ask your Registration Desk teammate to share 6 digit PIN with you</Text>
+          <Text style={styles.noteText}>{t('Ask your Registration Desk teammate to share 6 digit PIN with you')}</Text>
         </View>
       </View>
     );
@@ -133,9 +135,9 @@ const VitalsDesk = () => {
   // Record Vitals Screen
   if (view === 'record' && activePatient) {
     return (
-      <View style={styles.root}>
+      <View style={[styles.root, { backgroundColor: colors.background }]}>
         <View style={styles.blueHeader}>
-          <Text style={styles.blueHeaderTitle}>Record Vitals</Text>
+          <Text style={styles.blueHeaderTitle}>{t('Record Vitals')}</Text>
           <TouchableOpacity onPress={() => setView('queue')}>
             <Ionicons name="close" size={24} color="#fff" />
           </TouchableOpacity>
@@ -144,7 +146,7 @@ const VitalsDesk = () => {
         {/* Patient Info Card */}
         <View style={styles.patientCard}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.patientLabel}>Patient Info.</Text>
+            <Text style={styles.patientLabel}>{t('Patient Info.')}</Text>
             <Text style={styles.patientId}>{activePatient.id}</Text>
             <Text style={styles.patientName}>{activePatient.name}</Text>
             <Text style={styles.patientSub}>{activePatient.gender} • {activePatient.age} Yrs</Text>
@@ -158,18 +160,18 @@ const VitalsDesk = () => {
         <TouchableOpacity style={styles.collapsible} onPress={() => setComplaintsOpen(!complaintsOpen)}>
           <View style={styles.collapsibleLeft}>
             <Ionicons name="pulse" size={18} color="#2563EB" />
-            <Text style={styles.collapsibleTitle}>Patient Complaints</Text>
+            <Text style={styles.collapsibleTitle}>{t('Patient Complaints')}</Text>
           </View>
           <Ionicons name={complaintsOpen ? 'chevron-up' : 'chevron-down'} size={20} color="#2563EB" />
         </TouchableOpacity>
         {complaintsOpen && (
           <View style={styles.collapsibleBody}>
-            <Text style={styles.collapsibleText}>Symptoms recorded during registration will appear here.</Text>
+            <Text style={styles.collapsibleText}>{t('Symptoms recorded during registration will appear here.')}</Text>
           </View>
         )}
 
         <ScrollView style={{ flex: 1, paddingHorizontal: 20 }} contentContainerStyle={{ paddingBottom: 100 }}>
-          <Text style={styles.formSectionTitle}>Vitals</Text>
+          <Text style={styles.formSectionTitle}>{t('Vitals')}</Text>
           <View style={styles.vitalsGrid}>
             {[
               { label: 'Body temp.', icon: 'thermometer-outline' as const, value: bodyTemp, setter: setBodyTemp, placeholder: '98' },
@@ -182,7 +184,7 @@ const VitalsDesk = () => {
               <View key={field.label} style={styles.vitalField}>
                 <View style={styles.vitalFieldHeader}>
                   <Ionicons name={field.icon} size={16} color="#2563EB" />
-                  <Text style={styles.vitalFieldLabel}>{field.label}</Text>
+                  <Text style={styles.vitalFieldLabel}>{t(field.label)}</Text>
                 </View>
                 <TextInput
                   style={styles.vitalFieldInput}
@@ -196,19 +198,19 @@ const VitalsDesk = () => {
             ))}
           </View>
 
-          <Text style={styles.formSectionTitle}>Other Info.</Text>
+          <Text style={styles.formSectionTitle}>{t('Other Info.')}</Text>
           <View style={styles.vitalsGrid}>
             <View style={styles.vitalField}>
               <View style={styles.vitalFieldHeader}>
                 <Ionicons name="resize-outline" size={16} color="#2563EB" />
-                <Text style={styles.vitalFieldLabel}>Height</Text>
+                <Text style={styles.vitalFieldLabel}>{t('Height')}</Text>
               </View>
               <TextInput style={styles.vitalFieldInput} placeholder="5.6" placeholderTextColor="#ccc" value={height} onChangeText={setHeight} keyboardType="numeric" />
             </View>
             <View style={styles.vitalField}>
               <View style={styles.vitalFieldHeader}>
                 <Ionicons name="square-outline" size={16} color="#2563EB" />
-                <Text style={styles.vitalFieldLabel}>Weight</Text>
+                <Text style={styles.vitalFieldLabel}>{t('Weight')}</Text>
               </View>
               <TextInput style={styles.vitalFieldInput} placeholder="57" placeholderTextColor="#ccc" value={weight} onChangeText={setWeight} keyboardType="numeric" />
             </View>
@@ -217,7 +219,7 @@ const VitalsDesk = () => {
           <View style={[styles.vitalField, { width: '100%', marginTop: 8 }]}>
             <View style={styles.vitalFieldHeader}>
               <Ionicons name="eye-outline" size={16} color="#2563EB" />
-              <Text style={styles.vitalFieldLabel}>Allergies</Text>
+              <Text style={styles.vitalFieldLabel}>{t('Allergies')}</Text>
             </View>
             <TextInput style={styles.vitalFieldInput} placeholder="e.g. Dust Allergy" placeholderTextColor="#ccc" value={allergies} onChangeText={setAllergies} maxLength={200} />
           </View>
@@ -226,7 +228,7 @@ const VitalsDesk = () => {
             <Ionicons name="list-outline" size={18} color="#999" style={{ marginTop: 2 }} />
             <TextInput
               style={styles.notesInput}
-              placeholder="Additional Notes"
+              placeholder={t('Additional Notes')}
               placeholderTextColor="#999"
               value={notes}
               onChangeText={setNotes}
@@ -239,7 +241,7 @@ const VitalsDesk = () => {
         <View style={styles.bottomBar}>
           <TouchableOpacity style={styles.primaryBtn} onPress={handleComplete} activeOpacity={0.85}>
             <Ionicons name="checkmark" size={18} color="#fff" />
-            <Text style={styles.primaryBtnText}>Complete & Take Next Patient</Text>
+            <Text style={styles.primaryBtnText}>{t('Complete & Take Next Patient')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -248,13 +250,13 @@ const VitalsDesk = () => {
 
   // Queue Screen
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={styles.simpleHeader}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color="#111" />
         </TouchableOpacity>
         <View style={{ flex: 1, marginLeft: 12 }}>
-          <Text style={styles.simpleHeaderTitle}>Vitals Desk</Text>
+          <Text style={styles.simpleHeaderTitle}>{t('Vitals Desk')}</Text>
           <Text style={styles.headerSub}>{opdId}</Text>
         </View>
         <TouchableOpacity>
@@ -268,11 +270,11 @@ const VitalsDesk = () => {
           <View style={styles.bannerTop}>
             <View style={styles.bannerTopLeft}>
               <View style={[styles.pulseDot, { backgroundColor: '#FDE68A' }]} />
-              <Text style={styles.bannerLabel}>Ready for Vitals</Text>
+              <Text style={styles.bannerLabel}>{t('Ready for Vitals')}</Text>
             </View>
             <View style={styles.bannerBadge}>
               <Text style={[styles.bannerBadgeNum, { color: '#D97706' }]}>{inQueue} </Text>
-              <Text style={[styles.bannerBadgeText, { color: '#D97706' }]}>In Queue</Text>
+              <Text style={[styles.bannerBadgeText, { color: '#D97706' }]}>{t('In Queue')}</Text>
             </View>
           </View>
           <View style={styles.bannerStats}>
@@ -280,14 +282,14 @@ const VitalsDesk = () => {
               <View style={[styles.bannerBar, { backgroundColor: 'rgba(255,255,255,0.4)' }]} />
               <View>
                 <Text style={styles.bannerStatNum}>{totalCases}</Text>
-                <Text style={styles.bannerStatLabel}>Todays Total Case</Text>
+                <Text style={styles.bannerStatLabel}>{t('Todays Total Case')}</Text>
               </View>
             </View>
             <View style={styles.bannerStat}>
               <View style={[styles.bannerBar, { backgroundColor: '#FDE68A' }]} />
               <View>
                 <Text style={styles.bannerStatNum}>{vitalsCompleted}</Text>
-                <Text style={styles.bannerStatLabel}>Vitals Done</Text>
+                <Text style={styles.bannerStatLabel}>{t('Vitals Done')}</Text>
               </View>
             </View>
           </View>

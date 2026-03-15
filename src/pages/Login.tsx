@@ -7,6 +7,7 @@ const logoImg = require('../assets/setusaathi-logo.png');
 
 import { DEMO_CREDENTIALS } from '../lib/config';
 import { authService } from '../lib/api';
+import { usePreferences } from '../lib/PreferencesContext';
 
 const LoginScreen = () => {
   const [memberId, setMemberId] = useState('');
@@ -18,26 +19,29 @@ const LoginScreen = () => {
   const [resetEmail, setResetEmail] = useState('');
   const [resetSent, setResetSent] = useState(false);
   const navigation = useNavigation();
+  const { t, colors } = usePreferences();
 
   const handleLogin = async () => {
     if (!memberId.trim() || !password.trim()) {
-      Alert.alert('Error', 'Please enter your email and password.');
+      Alert.alert(t('Error'), t('Please enter your email and password.'));
       return;
     }
     setLoading(true);
     try {
+      // Just sign in with Firebase — onAuthStateChanged in AuthProvider
+      // will automatically fetch the user profile (with role) and
+      // App.tsx's RootNavigator will switch to the correct dashboard.
       await authService.login(memberId.trim(), password);
       setLoading(false);
-      navigation.navigate('Dashboard' as never);
     } catch {
       setLoading(false);
-      Alert.alert('Login Failed', `Invalid credentials.\n\nDemo: ${DEMO_CREDENTIALS.email} / ${DEMO_CREDENTIALS.password}`);
+      Alert.alert(t('Login Failed'), `${t('Invalid credentials.')}\n\n${t('Demo')}: ${DEMO_CREDENTIALS.email} / ${DEMO_CREDENTIALS.password}`);
     }
   };
 
   const handleForgotPassword = async () => {
     if (!resetEmail.trim()) {
-      Alert.alert('Error', 'Please enter your email address.');
+      Alert.alert(t('Error'), t('Please enter your email address.'));
       return;
     }
     try {
@@ -49,24 +53,24 @@ const LoginScreen = () => {
         setForgotModalVisible(false);
       }, 3000);
     } catch {
-      Alert.alert('Error', 'Could not send reset link. Try again.');
+      Alert.alert(t('Error'), t('Could not send reset link. Try again.'));
     }
   };
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1, overflow: 'hidden' as any }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+    <KeyboardAvoidingView style={{ flex: 1, overflow: 'hidden' as any, backgroundColor: colors.surface }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.surface }]} keyboardShouldPersistTaps="handled">
         <Image source={logoImg} style={styles.logoImage} resizeMode="contain" />
-        <Text style={styles.title}>Log In</Text>
+        <Text style={[styles.title, { color: colors.text }]}>{t('Log In')}</Text>
 
-        <View style={styles.inputWrapper}>
+        <View style={[styles.inputWrapper, { backgroundColor: colors.subSurface, borderColor: colors.border }]}>
           <Ionicons name="person-outline" size={20} color="#888" style={styles.inputIcon} />
-          <TextInput style={styles.input} placeholder="Member ID" placeholderTextColor="#888" value={memberId} onChangeText={setMemberId} autoCapitalize="none" keyboardType="email-address" />
+          <TextInput style={[styles.input, { color: colors.text }]} placeholder={t('Member ID')} placeholderTextColor={colors.mutedText} value={memberId} onChangeText={setMemberId} autoCapitalize="none" keyboardType="email-address" />
         </View>
 
-        <View style={styles.inputWrapper}>
+        <View style={[styles.inputWrapper, { backgroundColor: colors.subSurface, borderColor: colors.border }]}>
           <Ionicons name="lock-closed-outline" size={20} color="#888" style={styles.inputIcon} />
-          <TextInput style={[styles.input, { paddingRight: 48 }]} placeholder="Password" placeholderTextColor="#888" value={password} onChangeText={setPassword} secureTextEntry={!showPassword} />
+          <TextInput style={[styles.input, { paddingRight: 48, color: colors.text }]} placeholder={t('Password')} placeholderTextColor={colors.mutedText} value={password} onChangeText={setPassword} secureTextEntry={!showPassword} />
           <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
             <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#888" />
           </TouchableOpacity>
@@ -77,10 +81,10 @@ const LoginScreen = () => {
             <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
               {rememberMe && <Ionicons name="checkmark" size={14} color="#fff" />}
             </View>
-            <Text style={styles.rememberText}>Remember me</Text>
+            <Text style={[styles.rememberText, { color: colors.text }]}>{t('Remember me')}</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setForgotModalVisible(true)}>
-            <Text style={styles.forgotText}>Forgot Password?</Text>
+            <Text style={styles.forgotText}>{t('Forgot Password?')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -89,23 +93,23 @@ const LoginScreen = () => {
             <ActivityIndicator color="#fff" />
           ) : (
             <>
-              <Text style={styles.loginBtnText}>Log In</Text>
+              <Text style={styles.loginBtnText}>{t('Log In')}</Text>
               <Ionicons name="arrow-forward" size={20} color="#fff" style={{ marginLeft: 8 }} />
             </>
           )}
         </TouchableOpacity>
 
-        <Text style={styles.demoHint}>Demo: {DEMO_CREDENTIALS.email} / {DEMO_CREDENTIALS.password}</Text>
+        <Text style={[styles.demoHint, { color: colors.mutedText }]}>{t('Demo')}: {DEMO_CREDENTIALS.email} / {DEMO_CREDENTIALS.password}</Text>
 
         <View style={styles.registerRow}>
-          <Text style={styles.registerRowText}>Don't have an account? </Text>
+          <Text style={[styles.registerRowText, { color: colors.mutedText }]}>{t("Don't have an account?")} </Text>
           <TouchableOpacity onPress={() => navigation.navigate('Register' as never)}>
-            <Text style={styles.registerLink}>Register</Text>
+            <Text style={styles.registerLink}>{t('Register')}</Text>
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.contactText}>
-          Having trouble? Contact <Text style={styles.link}>SETU Admin</Text>
+        <Text style={[styles.contactText, { color: colors.mutedText }]}>
+          {t('Having trouble? Contact')} <Text style={styles.link}>SETU Admin</Text>
         </Text>
       </ScrollView>
 
