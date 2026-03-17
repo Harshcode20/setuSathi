@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Switch, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Switch, TextInput, Alert, ActivityIndicator, ScrollView, Modal } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import BottomNav from '../components/BottomNav';
@@ -13,6 +13,12 @@ const Settings = () => {
   const { user, userProfile, refreshUserProfile } = useAuth();
   const [mobile, setMobile] = useState('');
   const [savingMobile, setSavingMobile] = useState(false);
+  const [passwordModalVisible, setPasswordModalVisible] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const isDark = theme === 'dark';
 
@@ -47,18 +53,38 @@ const Settings = () => {
     }
   };
 
-  const handleChangePassword = async () => {
-    const emailForReset = userProfile?.email || user?.email || '';
-    if (!emailForReset) {
-      Alert.alert(t('Error'), 'Email not available for password reset.');
+  const handleOpenPasswordModal = () => {
+    setNewPassword('');
+    setConfirmPassword('');
+    setShowNewPassword(false);
+    setShowConfirmPassword(false);
+    setPasswordModalVisible(true);
+  };
+
+  const handleConfirmPasswordChange = async () => {
+    if (!newPassword.trim() || !confirmPassword.trim()) {
+      Alert.alert(t('Error'), 'Both password fields are required.');
       return;
     }
-
+    if (newPassword.length < 6) {
+      Alert.alert(t('Error'), 'Password must be at least 6 characters.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      Alert.alert(t('Error'), 'Passwords do not match.');
+      return;
+    }
     try {
-      await authService.forgotPassword(emailForReset);
-      Alert.alert('Password Reset Link Sent', `A reset link has been sent to ${emailForReset}.`);
+      setChangingPassword(true);
+      await authService.changePassword(newPassword);
+      Alert.alert('Success', 'Password updated successfully.');
+      setPasswordModalVisible(false);
+      setNewPassword('');
+      setConfirmPassword('');
     } catch (err: any) {
-      Alert.alert(t('Error'), err?.message || 'Failed to send reset link.');
+      Alert.alert(t('Error'), err?.message || 'Failed to update password.');
+    } finally {
+      setChangingPassword(false);
     }
   };
 
@@ -72,7 +98,7 @@ const Settings = () => {
         <View style={{ width: 24 }} />
       </View>
 
-      <View style={styles.content}>
+      <ScrollView style={styles.scrollArea} contentContainerStyle={styles.contentContainer}>
         <Text style={[styles.scopeNote, { color: colors.mutedText }]}>{t('settings.scopeNote')}</Text>
 
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -110,7 +136,7 @@ const Settings = () => {
             {savingMobile ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Update Mobile Number</Text>}
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.secondaryBtn, { borderColor: colors.border, backgroundColor: colors.subSurface }]} onPress={handleChangePassword} activeOpacity={0.85}>
+          <TouchableOpacity style={[styles.secondaryBtn, { borderColor: colors.border, backgroundColor: colors.subSurface }]} onPress={handleOpenPasswordModal} activeOpacity={0.85}>
             <Text style={[styles.secondaryBtnText, { color: colors.text }]}>Change Password</Text>
           </TouchableOpacity>
         </View>
@@ -162,9 +188,59 @@ const Settings = () => {
             />
           </View>
         </View>
-      </View>
+        <View style={{ height: 32 }} />
+      </ScrollView>
 
       <BottomNav />
+
+      <Modal visible={passwordModalVisible} transparent animationType="fade" onRequestClose={() => setPasswordModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalSheet, { backgroundColor: colors.surface }]}> 
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Update Password</Text>
+              <TouchableOpacity onPress={() => setPasswordModalVisible(false)}>
+                <Ionicons name="close" size={22} color={colors.mutedText} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.modalDescription, { color: colors.mutedText }]}>Enter a new password for your account.</Text>
+
+            <View style={[styles.modalInputRow, { borderColor: colors.border, backgroundColor: colors.subSurface }]}>
+              <Ionicons name="lock-closed-outline" size={18} color={colors.mutedText} style={{ marginRight: 8 }} />
+              <TextInput
+                style={[styles.modalInput, { color: colors.text }]}
+                placeholder="New Password"
+                placeholderTextColor={colors.mutedText}
+                secureTextEntry={!showNewPassword}
+                value={newPassword}
+                onChangeText={setNewPassword}
+              />
+              <TouchableOpacity onPress={() => setShowNewPassword((prev) => !prev)}>
+                <Ionicons name={showNewPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.mutedText} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={[styles.modalInputRow, { borderColor: colors.border, backgroundColor: colors.subSurface }]}> 
+              <Ionicons name="lock-closed-outline" size={18} color={colors.mutedText} style={{ marginRight: 8 }} />
+              <TextInput
+                style={[styles.modalInput, { color: colors.text }]}
+                placeholder="Confirm Password"
+                placeholderTextColor={colors.mutedText}
+                secureTextEntry={!showConfirmPassword}
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+              />
+              <TouchableOpacity onPress={() => setShowConfirmPassword((prev) => !prev)}>
+                <Ionicons name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.mutedText} />
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity style={[styles.modalPrimaryBtn, changingPassword && { opacity: 0.7 }]} onPress={handleConfirmPasswordChange} disabled={changingPassword} activeOpacity={0.85}>
+              {changingPassword ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalPrimaryBtnText}>Update Password</Text>}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -174,7 +250,8 @@ const styles = StyleSheet.create({
   header: { paddingTop: 52, paddingBottom: 18, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   backBtn: { padding: 4 },
   headerTitle: { fontSize: 20, fontWeight: '700', color: '#fff' },
-  content: { flex: 1, padding: 20, gap: 16 },
+  scrollArea: { flex: 1 },
+  contentContainer: { padding: 20, gap: 16, paddingBottom: 100 },
   scopeNote: { fontSize: 12, lineHeight: 18 },
   card: { borderWidth: 1, borderRadius: 16, padding: 16 },
   cardTitle: { fontSize: 17, fontWeight: '700' },
@@ -195,6 +272,15 @@ const styles = StyleSheet.create({
   secondaryBtnText: { fontSize: 14, fontWeight: '700' },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   switchLabel: { fontSize: 15, fontWeight: '600' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  modalSheet: { borderRadius: 18, padding: 20, width: '100%', maxWidth: 420, borderWidth: 1 },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  modalTitle: { fontSize: 18, fontWeight: '700' },
+  modalDescription: { fontSize: 13, marginBottom: 16 },
+  modalInputRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, marginBottom: 12 },
+  modalInput: { flex: 1, paddingVertical: 12, fontSize: 15 },
+  modalPrimaryBtn: { backgroundColor: '#2563EB', borderRadius: 12, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
+  modalPrimaryBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
 });
 
 export default Settings;

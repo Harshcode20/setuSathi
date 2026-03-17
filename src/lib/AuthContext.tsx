@@ -11,6 +11,10 @@ type UserProfile = {
   mobile?: string;
   photoUri?: string;
   role: 'doctor' | 'volunteer';
+  stats?: {
+    patients?: number;
+    consults?: number;
+  };
 };
 
 type AuthContextType = {

@@ -5,7 +5,6 @@ import { Ionicons } from '@expo/vector-icons';
 
 const logoImg = require('../assets/setusaathi-logo.png');
 
-import { DEMO_CREDENTIALS } from '../lib/config';
 import { authService } from '../lib/api';
 import { usePreferences } from '../lib/PreferencesContext';
 
@@ -14,18 +13,30 @@ const LoginScreen = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [forgotModalVisible, setForgotModalVisible] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
   const [resetSent, setResetSent] = useState(false);
   const navigation = useNavigation();
-  const { t, colors } = usePreferences();
+  const { t, colors, theme } = usePreferences();
+
+  const handleMemberChange = (value: string) => {
+    setMemberId(value);
+    if (loginError) setLoginError(null);
+  };
+
+  const handlePasswordChange = (value: string) => {
+    setPassword(value);
+    if (loginError) setLoginError(null);
+  };
 
   const handleLogin = async () => {
     if (!memberId.trim() || !password.trim()) {
       Alert.alert(t('Error'), t('Please enter your email and password.'));
       return;
     }
+    setLoginError(null);
     setLoading(true);
     try {
       // Just sign in with Firebase — onAuthStateChanged in AuthProvider
@@ -33,9 +44,20 @@ const LoginScreen = () => {
       // App.tsx's RootNavigator will switch to the correct dashboard.
       await authService.login(memberId.trim(), password);
       setLoading(false);
-    } catch {
+    } catch (err: any) {
       setLoading(false);
-      Alert.alert(t('Login Failed'), `${t('Invalid credentials.')}\n\n${t('Demo')}: ${DEMO_CREDENTIALS.email} / ${DEMO_CREDENTIALS.password}`);
+      const errorCode = err?.code || '';
+      const errorMessage = err?.message || '';
+      let friendly = t('Invalid credentials.');
+      if (errorCode.includes('wrong-password') || errorMessage.includes('wrong-password')) {
+        friendly = t('Incorrect password. Please try again.');
+      } else if (errorCode.includes('user-not-found')) {
+        friendly = t('Account not found. Please check the email/Member ID.');
+      } else if (errorCode.includes('too-many-requests')) {
+        friendly = t('Too many attempts. Please wait a moment and try again.');
+      }
+      setLoginError(friendly);
+      Alert.alert(t('Login Failed'), friendly);
     }
   };
 
@@ -57,20 +79,26 @@ const LoginScreen = () => {
     }
   };
 
+  const backgroundColors = theme === 'dark'
+    ? { top: '#0f172a', middle: '#1e293b', bottom: '#0f172a' }
+    : { top: '#DFF3FF', middle: '#EAF7FF', bottom: '#FFFFFF' };
+
   return (
-    <KeyboardAvoidingView style={{ flex: 1, overflow: 'hidden' as any, backgroundColor: colors.surface }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.surface }]} keyboardShouldPersistTaps="handled">
+    <KeyboardAvoidingView style={{ flex: 1, overflow: 'hidden' as any, backgroundColor: backgroundColors.bottom }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <View style={[styles.backgroundLayer, { backgroundColor: backgroundColors.top }]} pointerEvents="none" />
+      <View style={[styles.backgroundLayer, styles.backgroundLayerMid, { backgroundColor: backgroundColors.middle }]} pointerEvents="none" />
+      <ScrollView contentContainerStyle={[styles.container, { backgroundColor: 'transparent' }]} keyboardShouldPersistTaps="handled">
         <Image source={logoImg} style={styles.logoImage} resizeMode="contain" />
         <Text style={[styles.title, { color: colors.text }]}>{t('Log In')}</Text>
 
         <View style={[styles.inputWrapper, { backgroundColor: colors.subSurface, borderColor: colors.border }]}>
           <Ionicons name="person-outline" size={20} color="#888" style={styles.inputIcon} />
-          <TextInput style={[styles.input, { color: colors.text }]} placeholder={t('Member ID')} placeholderTextColor={colors.mutedText} value={memberId} onChangeText={setMemberId} autoCapitalize="none" keyboardType="email-address" />
+          <TextInput style={[styles.input, { color: colors.text }]} placeholder={t('Member ID')} placeholderTextColor={colors.mutedText} value={memberId} onChangeText={handleMemberChange} autoCapitalize="none" keyboardType="email-address" />
         </View>
 
         <View style={[styles.inputWrapper, { backgroundColor: colors.subSurface, borderColor: colors.border }]}>
           <Ionicons name="lock-closed-outline" size={20} color="#888" style={styles.inputIcon} />
-          <TextInput style={[styles.input, { paddingRight: 48, color: colors.text }]} placeholder={t('Password')} placeholderTextColor={colors.mutedText} value={password} onChangeText={setPassword} secureTextEntry={!showPassword} />
+          <TextInput style={[styles.input, { paddingRight: 48, color: colors.text }]} placeholder={t('Password')} placeholderTextColor={colors.mutedText} value={password} onChangeText={handlePasswordChange} secureTextEntry={!showPassword} />
           <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
             <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#888" />
           </TouchableOpacity>
@@ -99,7 +127,7 @@ const LoginScreen = () => {
           )}
         </TouchableOpacity>
 
-        <Text style={[styles.demoHint, { color: colors.mutedText }]}>{t('Demo')}: {DEMO_CREDENTIALS.email} / {DEMO_CREDENTIALS.password}</Text>
+        {loginError ? <Text style={styles.errorText}>{loginError}</Text> : null}
 
         <View style={styles.registerRow}>
           <Text style={[styles.registerRowText, { color: colors.mutedText }]}>{t("Don't have an account?")} </Text>
@@ -163,7 +191,9 @@ const LoginScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  backgroundLayer: { position: 'absolute', top: 0, left: 0, right: 0, height: '60%', borderBottomLeftRadius: 200, borderBottomRightRadius: 200 },
+  backgroundLayerMid: { top: '20%', height: '55%', opacity: 0.6 },
+  container: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   logoImage: { width: 120, height: 120, borderRadius: 60, marginBottom: 12 },
   title: { fontSize: 24, fontWeight: 'bold', color: '#111', marginBottom: 28 },
   inputWrapper: { width: '100%', flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9f9f9', borderWidth: 1, borderColor: '#e2e2e2', borderRadius: 14, marginBottom: 14, paddingHorizontal: 14 },
@@ -178,7 +208,7 @@ const styles = StyleSheet.create({
   forgotText: { fontSize: 14, color: '#2563EB', fontWeight: '600' },
   loginBtn: { width: '100%', backgroundColor: '#2563EB', paddingVertical: 18, borderRadius: 18, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', marginBottom: 12 },
   loginBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  demoHint: { fontSize: 12, color: '#aaa', marginBottom: 12 },
+  errorText: { width: '100%', textAlign: 'center', color: '#DC2626', fontSize: 13, marginBottom: 12 },
   contactText: { fontSize: 14, color: '#888', marginTop: 8 },
   link: { color: '#2563EB', fontWeight: 'bold' },
   registerRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },

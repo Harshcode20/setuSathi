@@ -25,11 +25,51 @@ const RegisterScreen = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [mobileError, setMobileError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [confirmPasswordError, setConfirmPasswordError] = useState<string | null>(null);
   const navigation = useNavigation();
   const toast = useToast();
   const { t, colors } = usePreferences();
 
   const isMobileValid = /^\d{10}$/.test(mobile.trim());
+
+  const handleMobileChange = (value: string) => {
+    const sanitized = value.replace(/\D/g, '').slice(0, 10);
+    setMobile(sanitized);
+    if (!sanitized) {
+      setMobileError(null);
+    } else if (sanitized.length < 10) {
+      setMobileError(t('Mobile number must be 10 digits.'));
+    } else {
+      setMobileError(null);
+    }
+  };
+
+  const handlePasswordChange = (value: string) => {
+    setPassword(value);
+    if (!value) {
+      setPasswordError(null);
+    } else if (value.length < 6) {
+      setPasswordError(t('Password must be at least 6 characters.'));
+    } else {
+      setPasswordError(null);
+    }
+    if (confirmPassword) {
+      setConfirmPasswordError(value === confirmPassword ? null : t('Passwords do not match.'));
+    }
+  };
+
+  const handleConfirmPasswordChange = (value: string) => {
+    setConfirmPassword(value);
+    if (!value) {
+      setConfirmPasswordError(null);
+    } else if (value !== password) {
+      setConfirmPasswordError(t('Passwords do not match.'));
+    } else {
+      setConfirmPasswordError(null);
+    }
+  };
 
   const pickFromLibrary = async () => {
     try {
@@ -103,7 +143,8 @@ const RegisterScreen = () => {
       return;
     }
     if (!isMobileValid) {
-      Alert.alert(t('Error'), 'Mobile Number should be 10 digit.');
+      setMobileError(t('Mobile number must be 10 digits.'));
+      Alert.alert(t('Error'), t('Mobile number must be 10 digits.'));
       return;
     }
     if (!password.trim() || !confirmPassword.trim()) {
@@ -111,10 +152,12 @@ const RegisterScreen = () => {
       return;
     }
     if (password !== confirmPassword) {
+      setConfirmPasswordError(t('Passwords do not match.'));
       Alert.alert(t('Error'), t('Passwords do not match.'));
       return;
     }
     if (password.length < 6) {
+      setPasswordError(t('Password must be at least 6 characters.'));
       Alert.alert(t('Error'), t('Password must be at least 6 characters.'));
       return;
     }
@@ -228,11 +271,12 @@ const RegisterScreen = () => {
             placeholder={t('Mobile Number')}
             placeholderTextColor={colors.mutedText}
             value={mobile}
-            onChangeText={(value) => setMobile(value.replace(/\D/g, '').slice(0, 10))}
+            onChangeText={handleMobileChange}
             keyboardType="phone-pad"
             maxLength={10}
           />
         </View>
+        {mobileError ? <Text style={styles.errorText}>{mobileError}</Text> : null}
 
         {/* Password */}
         <View style={styles.labelRow}>
@@ -241,11 +285,12 @@ const RegisterScreen = () => {
         </View>
         <View style={[styles.inputWrapper, { backgroundColor: colors.subSurface, borderColor: colors.border }]}>
           <Ionicons name="lock-closed-outline" size={20} color="#888" style={styles.inputIcon} />
-          <TextInput style={[styles.input, { paddingRight: 48, color: colors.text }]} placeholder={t('Password')} placeholderTextColor={colors.mutedText} value={password} onChangeText={setPassword} secureTextEntry={!showPassword} />
+          <TextInput style={[styles.input, { paddingRight: 48, color: colors.text }]} placeholder={t('Password')} placeholderTextColor={colors.mutedText} value={password} onChangeText={handlePasswordChange} secureTextEntry={!showPassword} />
           <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
             <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#888" />
           </TouchableOpacity>
         </View>
+        {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
 
         {/* Confirm Password */}
         <View style={styles.labelRow}>
@@ -254,11 +299,12 @@ const RegisterScreen = () => {
         </View>
         <View style={[styles.inputWrapper, { backgroundColor: colors.subSurface, borderColor: colors.border }]}>
           <Ionicons name="lock-closed-outline" size={20} color="#888" style={styles.inputIcon} />
-          <TextInput style={[styles.input, { paddingRight: 48, color: colors.text }]} placeholder={t('Confirm Password')} placeholderTextColor={colors.mutedText} value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry={!showConfirmPassword} />
+          <TextInput style={[styles.input, { paddingRight: 48, color: colors.text }]} placeholder={t('Confirm Password')} placeholderTextColor={colors.mutedText} value={confirmPassword} onChangeText={handleConfirmPasswordChange} secureTextEntry={!showConfirmPassword} />
           <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={styles.eyeBtn}>
             <Ionicons name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#888" />
           </TouchableOpacity>
         </View>
+        {confirmPasswordError ? <Text style={styles.errorText}>{confirmPasswordError}</Text> : null}
 
         <TouchableOpacity style={styles.registerBtn} onPress={handleRegister} activeOpacity={0.85} disabled={loading}>
           {loading ? (
@@ -339,6 +385,7 @@ const styles = StyleSheet.create({
   eyeBtn: { position: 'absolute', right: 14, padding: 4 },
   registerBtn: { width: '100%', backgroundColor: '#2563EB', paddingVertical: 18, borderRadius: 18, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', marginTop: 10, marginBottom: 16 },
   registerBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  errorText: { width: '100%', fontSize: 12, color: '#DC2626', marginTop: -8, marginBottom: 10, paddingHorizontal: 4 },
   loginRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
   loginRowText: { fontSize: 14, color: '#888' },
   loginLink: { fontSize: 14, color: '#2563EB', fontWeight: 'bold' },

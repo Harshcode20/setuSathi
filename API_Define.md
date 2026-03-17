@@ -1,7 +1,6 @@
 # SetuSathi API Contract (Frontend -> Backend)
 
 This document defines API endpoints required by the current frontend flows.
-It is only a contract (method, path, request, response) — backend implementation is owned by backend team.
 
 Base URL: `http://<your-server-host>:8000`
 
@@ -314,6 +313,36 @@ Base URL: `http://<your-server-host>:8000`
   "consultsDone": 18,
   "medicinesGiven": 15
 }
+
+```
+
+### 3.5 Update OPD Patient Status
+- **Method/Path:** `PATCH /opd/sessions/{pin}/patients/{patient_id}`
+- **Used by:** Doctor OPD session (mark patient as consulted/completed)
+- **Request:**
+
+```json
+{
+  "status": "consulted",
+  "notes": "Follow-up after 1 week"
+}
+```
+
+- **Response:**
+
+```json
+{
+  "success": true,
+  "patient": {
+    "id": "P1234",
+    "name": "Dharamshinhbhai Prajapati",
+    "gender": "Male",
+    "age": 58,
+    "token": 1,
+    "status": "consulted",
+    "notes": "Follow-up after 1 week"
+  }
+}
 ```
 
 ---
@@ -453,5 +482,3 @@ Base URL: `http://<your-server-host>:8000`
 - **Medicine Counter:** `POST /patients/{patient_id}/medicines`
 
 ---
-
-If you share final backend naming preferences (for example `/opd/sessions/{session_id}` vs `/opd/sessions/{pin}`), this file can be adjusted in one pass.

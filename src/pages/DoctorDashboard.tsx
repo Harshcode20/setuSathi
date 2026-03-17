@@ -82,6 +82,11 @@ const DoctorDashboard = () => {
     ]);
   };
 
+  const opdStats = {
+    totalPatients: userProfile?.stats?.patients ?? 42,
+    consultsDone: userProfile?.stats?.consults ?? 18,
+  };
+
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 80 }}>
@@ -105,7 +110,7 @@ const DoctorDashboard = () => {
         {/* Doctor Profile Card */}
         <View style={styles.profileCardOuter}>
           <View style={[styles.profileCard, { backgroundColor: colors.surface }]}> 
-            <Image source={logoImg} style={[styles.profileWatermark, { opacity: isDark ? 0.1 : 0.16 }]} resizeMode="contain" />
+            <Image source={logoImg} style={[styles.profileWatermark, { opacity: isDark ? 0.20 : 0.09 }]} resizeMode="contain" />
             <Image source={profileImageSource} style={styles.profileAvatarImg} />
             <View style={styles.profileInfo}>
               <Text style={[styles.profileId, { color: colors.mutedText }]}>{displayId}</Text>
@@ -118,27 +123,27 @@ const DoctorDashboard = () => {
           </View>
         </View>
 
-        {/* OPD Statistics Placeholder */}
+        {/* OPD Statistics */}
         <View style={styles.section}>
-          <View style={[styles.statsPlaceholderCard, { backgroundColor: colors.surface }]}> 
-            <View style={styles.statsIconRow}>
-              <View style={[styles.statsIconCircle, { backgroundColor: '#FDE8E8' }]}>
-                <MaterialCommunityIcons name="account-plus-outline" size={20} color="#E53E3E" />
+          <View style={[styles.statsCard, { backgroundColor: colors.surface }]}> 
+            <Text style={[styles.statsTitle, { color: colors.text }]}>{t('dashboard.opdStatistics')}</Text>
+            <View style={styles.bigStatsRow}>
+              <View style={[styles.bigStat, { backgroundColor: 'rgba(13,148,136,0.12)' }]}>
+                <Ionicons name="people-outline" size={22} color="#0D9488" />
+                <Text style={[styles.bigStatNum, { color: '#0D9488' }]}>{opdStats.totalPatients}</Text>
+                <Text style={[styles.bigStatLabel, { color: colors.mutedText }]}>{t('dashboard.totalPatients')}</Text>
               </View>
-              <View style={[styles.statsIconCircle, { backgroundColor: '#E0F7FA' }]}>
-                <Ionicons name="body-outline" size={20} color="#0097A7" />
-              </View>
-              <View style={[styles.statsIconCircle, { backgroundColor: '#F3E8FF' }]}>
-                <MaterialCommunityIcons name="account-group-outline" size={20} color="#7C3AED" />
+              <View style={[styles.bigStat, { backgroundColor: 'rgba(99,102,241,0.12)' }]}>
+                <MaterialCommunityIcons name="stethoscope" size={22} color="#6366F1" />
+                <Text style={[styles.bigStatNum, { color: '#6366F1' }]}>{opdStats.consultsDone}</Text>
+                <Text style={[styles.bigStatLabel, { color: colors.mutedText }]}>{t('dashboard.consults')}</Text>
               </View>
             </View>
-            <Text style={[styles.statsPlaceholderTitle, { color: colors.text }]}>{t('doctorDashboard.statsPlaceholder1')}</Text>
-            <Text style={[styles.statsPlaceholderTitle, { color: colors.text }]}>{t('doctorDashboard.statsPlaceholder2')}</Text>
           </View>
         </View>
 
         {/* Enter 6 Digit Code */}
-        <View style={styles.section}>
+        <View style={[styles.section, styles.pinSection]}> 
           <View style={[styles.pinCard, { backgroundColor: colors.surface }]}> 
             <Text style={[styles.pinCardTitle, { color: colors.text }]}>{t('doctorDashboard.pinTitle')}</Text>
             <View style={styles.pinRow}>
@@ -207,29 +212,32 @@ const styles = StyleSheet.create({
   headerDate: { fontSize: 13, color: 'rgba(255,255,255,0.9)' },
   logoutBtn: { marginLeft: 12, padding: 4 },
 
-  profileCardOuter: { marginTop: -40, marginHorizontal: 20 },
-  profileCard: { backgroundColor: '#fff', borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, elevation: 4, overflow: 'hidden' },
-  profileWatermark: { position: 'absolute', right: -16, top: -8, width: 170, height: 120 },
-  profileAvatarImg: { width: 72, height: 72, borderRadius: 14, borderWidth: 2, borderColor: '#e2e2e2' },
-  profileInfo: { flex: 1, marginLeft: 14 },
-  profileId: { fontSize: 13, color: '#888' },
-  profileName: { fontSize: 18, fontWeight: 'bold', color: '#111', marginTop: 2 },
-  profileBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EEF2FF', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5, marginTop: 6, alignSelf: 'flex-start', gap: 4 },
+  profileCardOuter: { marginTop: -48, marginHorizontal: 20 },
+  profileCard: { backgroundColor: '#fff', borderRadius: 24, paddingVertical: 26, paddingHorizontal: 28, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 12, elevation: 6, overflow: 'hidden' },
+  profileWatermark: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: undefined, height: undefined, transform: [{ rotate: '-4deg' }], alignSelf: 'center' },
+    profileAvatarImg: { width: 92, height: 92, borderRadius: 18, borderWidth: 3, borderColor: '#e2e2e2', marginTop: -18, marginRight: 6 },
+  profileInfo: { flex: 1, marginLeft: 18 },
+  profileId: { fontSize: 14, color: '#64748B' },
+  profileName: { fontSize: 22, fontWeight: '800', color: '#111', marginTop: 4 },
+  profileBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EEF2FF', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6, marginTop: 10, alignSelf: 'flex-start', gap: 6 },
   profileBadgeText: { fontSize: 11, color: '#2563EB', fontWeight: '500' },
 
-  section: { marginHorizontal: 20, marginTop: 20 },
+  section: { marginHorizontal: 20, marginTop: 16 },
+  pinSection: { marginBottom: 24 },
 
-  statsPlaceholderCard: { backgroundColor: '#fff', borderRadius: 18, padding: 28, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
-  statsIconRow: { flexDirection: 'row', gap: 12, marginBottom: 16 },
-  statsIconCircle: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  statsPlaceholderTitle: { fontSize: 16, fontWeight: '600', color: '#111', textAlign: 'center' },
+  statsCard: { backgroundColor: '#fff', borderRadius: 18, padding: 20, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
+  statsTitle: { fontSize: 16, fontWeight: 'bold', color: '#111', marginBottom: 16 },
+  bigStatsRow: { flexDirection: 'row', gap: 12 },
+  bigStat: { flex: 1, borderRadius: 18, paddingVertical: 24, paddingHorizontal: 12, alignItems: 'center', gap: 4 },
+  bigStatNum: { fontSize: 34, fontWeight: '800', marginTop: 2 },
+  bigStatLabel: { fontSize: 13, color: '#666', textAlign: 'center' },
 
   noOpdCard: { backgroundColor: '#fff', borderRadius: 18, padding: 28, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
   noOpdIconWrapper: { width: 56, height: 56, borderRadius: 14, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
   noOpdTitle: { fontSize: 16, fontWeight: '700', color: '#111', marginBottom: 6 },
   noOpdDesc: { fontSize: 13, color: '#9CA3AF', textAlign: 'center', lineHeight: 18 },
 
-  pinCard: { backgroundColor: '#fff', borderRadius: 18, padding: 24, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
+  pinCard: { backgroundColor: '#fff', borderRadius: 18, padding: 28, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
   pinCardTitle: { fontSize: 16, fontWeight: '700', color: '#111', marginBottom: 20 },
   pinRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
   pinBox: { width: 48, height: 56, borderWidth: 2, borderColor: '#E5E7EB', borderRadius: 12, textAlign: 'center', fontSize: 24, fontWeight: 'bold', color: '#111', backgroundColor: '#F9FAFB' },

@@ -15,7 +15,7 @@
  */
 
 import { USE_BACKEND, API_BASE_URL, API_KEYS, API_TIMEOUT, FIREBASE_CONFIG, DEMO_CREDENTIALS } from './config';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, sendPasswordResetEmail } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, sendPasswordResetEmail, updatePassword } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
 
@@ -26,7 +26,7 @@ const headers = () => ({
   ...(API_KEYS.apiKey !== 'YOUR_API_KEY' ? { Authorization: `Bearer ${API_KEYS.apiKey}` } : {}),
 });
 
-const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
+const apiFetch = async <T = unknown>(endpoint: string, options: RequestInit = {}): Promise<T> => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), API_TIMEOUT);
 
@@ -38,19 +38,28 @@ const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
   clearTimeout(timeout);
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
+    const body = (await res.json().catch(() => ({}))) as Record<string, any>;
     throw new Error(body.detail || body.message || `API error: ${res.status}`);
   }
 
-  if (res.status === 204) return null;
+  if (res.status === 204) return undefined as T;
 
   const contentType = res.headers.get('content-type') || '';
   if (contentType.toLowerCase().includes('application/json')) {
-    return res.json();
+    const json = await res.json();
+    return json as T;
   }
 
   const text = await res.text();
-  return text as unknown;
+  return text as T;
+};
+
+const normalizeStats = (raw: any) => {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const patients = typeof raw.patients === 'number' ? raw.patients : undefined;
+  const consults = typeof raw.consults === 'number' ? raw.consults : undefined;
+  if (patients === undefined && consults === undefined) return undefined;
+  return { patients, consults };
 };
 
 export const authService = {
@@ -100,16 +109,18 @@ export const authService = {
       setRegistering(true);
       try {
         const userCred = await createUserWithEmailAndPassword(auth, email, password);
-        await updateProfile(userCred.user, {
-          displayName: fullName,
-          ...(photoUri ? { photoURL: photoUri } : {}),
-        });
+        try {
+          await updateProfile(userCred.user, {
+            displayName: fullName,
+          });
+        } catch (err) {
+          console.warn('Skipping Firebase profile metadata update:', err);
+        }
         await setDoc(doc(db, 'users', userCred.user.uid), {
           fullName,
           memberId,
           email,
           mobile,
-          photoUri: photoUri || '',
           role,
           createdAt: new Date().toISOString(),
         });
@@ -146,7 +157,16 @@ export const authService = {
           mobile: data.mobile || '',
           photoUri: data.photoUri || data.photoURL || currentAuthUser?.photoURL || '',
           role: data.role || 'doctor',
-        } as { fullName: string; memberId: string; email: string; mobile?: string; photoUri?: string; role: 'doctor' | 'volunteer' };
+          stats: normalizeStats(data.stats),
+        } as {
+          fullName: string;
+          memberId: string;
+          email: string;
+          mobile?: string;
+          photoUri?: string;
+          role: 'doctor' | 'volunteer';
+          stats?: { patients?: number; consults?: number };
+        };
       }
       // Fallback: check legacy 'doctors' collection
       const docSnap = await getDoc(doc(db, 'doctors', uid));
@@ -159,6 +179,7 @@ export const authService = {
           mobile: data.mobile || '',
           photoUri: data.photoUri || currentAuthUser?.photoURL || '',
           role: 'doctor' as const,
+          stats: normalizeStats(data.stats),
         };
       }
     }
@@ -238,6 +259,20 @@ export const authService = {
     return { success: true, message: 'Reset link sent (demo)' };
   },
 
+  changePassword: async (newPassword: string) => {
+    const hasValidFirebaseConfig = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_FIREBASE_API_KEY';
+
+    if (hasValidFirebaseConfig && USE_BACKEND) {
+      if (!auth.currentUser) {
+        throw new Error('No authenticated user found. Please log in again.');
+      }
+      await updatePassword(auth.currentUser, newPassword);
+      return { success: true };
+    }
+
+    throw new Error('Password update requires Firebase backend');
+  },
+
   /**
    * Logout current user.
    */
@@ -286,7 +321,7 @@ export const patientService = {
     created_by?: number;
     updated_by?: number;
   }): Promise<PatientApiData> => {
-    return apiFetch('/patients', {
+    return apiFetch<PatientApiData>('/patients', {
       method: 'POST',
       body: JSON.stringify({
         full_name: data.full_name,
@@ -307,7 +342,7 @@ export const patientService = {
    * GET /patients?skip=0&limit=100
    */
   getAll: async (skip = 0, limit = 100): Promise<PatientApiData[]> => {
-    return apiFetch(`/patients?skip=${skip}&limit=${limit}`);
+    return apiFetch<PatientApiData[]>(`/patients?skip=${skip}&limit=${limit}`);
   },
 
   /**
@@ -315,7 +350,7 @@ export const patientService = {
    * GET /patients/{patient_id}
    */
   getById: async (patientId: number): Promise<PatientApiData> => {
-    return apiFetch(`/patients/${patientId}`);
+    return apiFetch<PatientApiData>(`/patients/${patientId}`);
   },
 
   /**
@@ -323,7 +358,7 @@ export const patientService = {
    * PUT /patients/{patient_id}
    */
   update: async (patientId: number, data: Partial<Omit<PatientApiData, 'patient_id' | 'created_at' | 'updated_at' | 'created_by'>> & { updated_by: number }): Promise<PatientApiData> => {
-    return apiFetch(`/patients/${patientId}`, {
+    return apiFetch<PatientApiData>(`/patients/${patientId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
@@ -343,7 +378,7 @@ export const patientService = {
     });
     clearTimeout(timeout);
     if (!res.ok && res.status !== 204) {
-      const body = await res.json().catch(() => ({}));
+      const body = (await res.json().catch(() => ({}))) as Record<string, any>;
       throw new Error(body.detail || `API error: ${res.status}`);
     }
   },
@@ -353,7 +388,7 @@ export const patientService = {
    * GET /patients/search/{search_term}
    */
   search: async (searchTerm: string, skip = 0, limit = 100): Promise<PatientApiData[]> => {
-    return apiFetch(`/patients/search/${encodeURIComponent(searchTerm)}?skip=${skip}&limit=${limit}`);
+    return apiFetch<PatientApiData[]>(`/patients/search/${encodeURIComponent(searchTerm)}?skip=${skip}&limit=${limit}`);
   },
 };
 
@@ -401,7 +436,7 @@ export const opdService = {
           village: string;
           deskRole: string;
           status: string;
-          patients: Array<{ id: string; name: string; gender: string; age: number; token: number }>;
+          patients: Array<{ id: string; name: string; gender: string; age: number; token: number; status?: string; notes?: string }>;
           createdAt: string;
         };
       }
@@ -416,11 +451,11 @@ export const opdService = {
       deskRole: 'registration',
       status: 'active',
       patients: [
-        { id: 'P1234', name: 'Dharamshinhbhai Prajapati', gender: 'Male', age: 58, token: 1 },
-        { id: 'P1235', name: 'Manguben Solanki', gender: 'Male', age: 58, token: 2 },
-        { id: 'P1236', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 3 },
-        { id: 'P1237', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 4 },
-        { id: 'P1238', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 5 },
+        { id: 'P1234', name: 'Dharamshinhbhai Prajapati', gender: 'Male', age: 58, token: 1, status: 'waiting' },
+        { id: 'P1235', name: 'Manguben Solanki', gender: 'Male', age: 58, token: 2, status: 'waiting' },
+        { id: 'P1236', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 3, status: 'waiting' },
+        { id: 'P1237', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 4, status: 'waiting' },
+        { id: 'P1238', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 5, status: 'waiting' },
       ],
       createdAt: new Date().toISOString(),
     };
@@ -429,15 +464,38 @@ export const opdService = {
   /**
    * Add a patient to an OPD session in Firestore.
    */
-  addPatientToSession: async (pin: string, patient: { id: string; name: string; gender: string; age: number; token: number }) => {
+  addPatientToSession: async (pin: string, patient: { id: string; name: string; gender: string; age: number; token: number; status?: string; notes?: string }) => {
     const hasValidFirebaseConfig = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_FIREBASE_API_KEY';
 
     if (hasValidFirebaseConfig && USE_BACKEND) {
       const { arrayUnion, updateDoc } = require('firebase/firestore');
       await updateDoc(doc(db, 'opd_sessions', pin), {
-        patients: arrayUnion(patient),
+        patients: arrayUnion({ ...patient, status: patient.status || 'waiting' }),
       });
     }
+    return { success: true };
+  },
+
+  /**
+   * Update the status/notes of a patient in the OPD queue.
+   */
+  updatePatientStatus: async (pin: string, patientId: string, updates: { status?: string; notes?: string }) => {
+    const hasValidFirebaseConfig = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_FIREBASE_API_KEY';
+
+    if (hasValidFirebaseConfig && USE_BACKEND) {
+      const sessionRef = doc(db, 'opd_sessions', pin);
+      const snap = await getDoc(sessionRef);
+      if (!snap.exists()) {
+        throw new Error('OPD session not found');
+      }
+      const data = snap.data();
+      const patients = Array.isArray(data.patients) ? data.patients : [];
+      const updatedPatients = patients.map((p: any) => (p.id === patientId ? { ...p, ...updates } : p));
+      await setDoc(sessionRef, { patients: updatedPatients }, { merge: true });
+      const updatedPatient = updatedPatients.find((p: any) => p.id === patientId);
+      return { success: true, patient: updatedPatient };
+    }
+
     return { success: true };
   },
 
