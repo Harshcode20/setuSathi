@@ -78,15 +78,6 @@ export const authService = {
         user: { id: userCred.user.uid, name: 'User', email: userCred.user.email },
       };
     }
-
-    // Demo mode
-    if (email === DEMO_CREDENTIALS.email && password === DEMO_CREDENTIALS.password) {
-      return {
-        success: true,
-        user: { id: DEMO_CREDENTIALS.doctorId, name: DEMO_CREDENTIALS.doctorName, email },
-      };
-    }
-    throw new Error('Invalid credentials');
   },
 
   /**
@@ -494,6 +485,28 @@ export const opdService = {
       await setDoc(sessionRef, { patients: updatedPatients }, { merge: true });
       const updatedPatient = updatedPatients.find((p: any) => p.id === patientId);
       return { success: true, patient: updatedPatient };
+    }
+
+    return { success: true };
+  },
+
+  /**
+   * End an OPD session (marks status as completed/closed).
+   */
+  endSession: async (pin: string) => {
+    const hasValidFirebaseConfig = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_FIREBASE_API_KEY';
+
+    if (hasValidFirebaseConfig && USE_BACKEND) {
+      const sessionRef = doc(db, 'opd_sessions', pin);
+      await setDoc(
+        sessionRef,
+        {
+          status: 'completed',
+          endedAt: new Date().toISOString(),
+        },
+        { merge: true },
+      );
+      return { success: true };
     }
 
     return { success: true };

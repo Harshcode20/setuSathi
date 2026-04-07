@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, TextInput, FlatList } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, TextInput, FlatList, Alert, Platform } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { usePatientStore } from '../lib/PatientStore';
 import { usePreferences } from '../lib/PreferencesContext';
+import { opdService } from '../lib/api';
 
 interface CaseEntry {
   token: number;
@@ -23,6 +24,8 @@ const RegistrationDesk = () => {
 
   const [cases, setCases] = useState<CaseEntry[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [endingSession, setEndingSession] = useState(false);
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState<typeof allPatients>([]);
 
@@ -56,6 +59,56 @@ const RegistrationDesk = () => {
     return (parts[0]?.[0] || '') + (parts[1]?.[0] || '');
   };
 
+  const showEndSessionPrompt = () => {
+    setMenuVisible(false);
+    if (!opdPin) {
+      const message = t('No active OPD session PIN found.');
+      if (Platform.OS === 'web') {
+        (globalThis as any).alert(message);
+      } else {
+        Alert.alert(t('End OPD Session'), message);
+      }
+      return;
+    }
+    const proceed = () => handleEndSession();
+    if (Platform.OS === 'web') {
+      if ((globalThis as any).confirm(t('Are you sure you want to end the OPD session?'))) {
+        proceed();
+      }
+    } else {
+      Alert.alert(
+        t('End OPD Session'),
+        t('Ending the OPD will stop new registrations for this PIN. Continue?'),
+        [
+          { text: t('Cancel'), style: 'cancel' },
+          { text: t('End Session'), style: 'destructive', onPress: proceed },
+        ],
+      );
+    }
+  };
+
+  const handleEndSession = async () => {
+    try {
+      setEndingSession(true);
+      await opdService.endSession(opdPin);
+      if (Platform.OS === 'web') {
+        (globalThis as any).alert(t('OPD session ended.'));
+      } else {
+        Alert.alert(t('OPD session ended'), t('You can start a new OPD anytime.'));
+      }
+      (navigation as any).navigate('Dashboard');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t('Failed to end OPD session.');
+      if (Platform.OS === 'web') {
+        (globalThis as any).alert(message);
+      } else {
+        Alert.alert(t('Failed to end session'), message);
+      }
+    } finally {
+      setEndingSession(false);
+    }
+  };
+
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       {/* Header */}
@@ -67,7 +120,7 @@ const RegistrationDesk = () => {
           <Text style={[styles.headerTitle, { color: colors.text }]}>{t('Registration Desk')}</Text>
           <Text style={[styles.headerSub, { color: colors.mutedText }]}>{opdId}</Text>
         </View>
-        <TouchableOpacity>
+        <TouchableOpacity onPress={() => setMenuVisible(true)} style={styles.menuTrigger}>
           <Ionicons name="ellipsis-vertical" size={20} color="#999" />
         </TouchableOpacity>
       </View>
@@ -103,6 +156,24 @@ const RegistrationDesk = () => {
           </View>
         </View>
       </View>
+
+      <Modal visible={menuVisible} transparent animationType="fade" onRequestClose={() => setMenuVisible(false)}>
+        <View style={styles.menuOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setMenuVisible(false)} />
+          <View style={[styles.menuSheet, { backgroundColor: colors.surface, borderColor: colors.border }]}> 
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={showEndSessionPrompt}
+              disabled={endingSession}
+            >
+              <Ionicons name="stop-circle-outline" size={18} color="#DC2626" />
+              <Text style={[styles.menuItemText, endingSession ? styles.menuItemTextDisabled : null]}>
+                {endingSession ? t('Ending...') : t('End OPD Session')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Cases List or Empty State */}
       <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 100 }}>
@@ -223,6 +294,7 @@ const styles = StyleSheet.create({
   header: { backgroundColor: '#fff', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 50, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#e5e5e5' },
   headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#111' },
   headerSub: { fontSize: 13, color: '#999', marginTop: 2 },
+  menuTrigger: { padding: 6 },
   bannerContainer: { paddingHorizontal: 20, paddingTop: 20 },
   banner: { backgroundColor: '#B91C1C', borderRadius: 14, padding: 16 },
   bannerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
@@ -270,6 +342,11 @@ const styles = StyleSheet.create({
   modalFooter: { alignItems: 'center', paddingTop: 20, paddingBottom: 8 },
   modalFooterText: { fontSize: 13, color: '#999' },
   modalFooterLink: { color: '#2563EB', fontWeight: '600', fontSize: 13, marginTop: 4 },
+  menuOverlay: { flex: 1, justifyContent: 'flex-start', alignItems: 'flex-end', paddingTop: 70, paddingRight: 16, backgroundColor: 'rgba(0,0,0,0.05)' },
+  menuSheet: { borderRadius: 12, paddingVertical: 8, minWidth: 180, borderWidth: 1, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
+  menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 14, gap: 10 },
+  menuItemText: { fontSize: 14, fontWeight: '600', color: '#111' },
+  menuItemTextDisabled: { color: '#9CA3AF' },
 });
 
 export default RegistrationDesk;
