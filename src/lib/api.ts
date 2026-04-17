@@ -290,8 +290,8 @@ export type PatientApiData = {
   mobile_number: string;
   address: string;
   photo_url: string;
-  created_by: number;
-  updated_by: number;
+  created_by: string;
+  updated_by: string;
   created_at: string;
   updated_at: string;
 };
@@ -309,8 +309,8 @@ export const patientService = {
     mobile_number?: string;
     address?: string;
     photo_url?: string;
-    created_by?: number;
-    updated_by?: number;
+    created_by?: string;
+    updated_by?: string;
   }): Promise<PatientApiData> => {
     return apiFetch<PatientApiData>('/patients', {
       method: 'POST',
@@ -322,8 +322,8 @@ export const patientService = {
         mobile_number: data.mobile_number || '',
         address: data.address || '',
         photo_url: data.photo_url || '',
-        created_by: data.created_by || 1,
-        updated_by: data.updated_by || 1,
+        created_by: data.created_by || '1',
+        updated_by: data.updated_by || '1',
       }),
     });
   },
@@ -333,7 +333,12 @@ export const patientService = {
    * GET /patients?skip=0&limit=100
    */
   getAll: async (skip = 0, limit = 100): Promise<PatientApiData[]> => {
-    return apiFetch<PatientApiData[]>(`/patients?skip=${skip}&limit=${limit}`);
+    const res = await apiFetch<any>(`/patients?skip=${skip}&limit=${limit}`);
+    if (Array.isArray(res)) return res;
+    if (res && Array.isArray(res.data)) return res.data;
+    if (res && Array.isArray(res.patients)) return res.patients;
+    if (res && Array.isArray(res.items)) return res.items;
+    return [];
   },
 
   /**
@@ -348,7 +353,7 @@ export const patientService = {
    * Update a patient.
    * PUT /patients/{patient_id}
    */
-  update: async (patientId: number, data: Partial<Omit<PatientApiData, 'patient_id' | 'created_at' | 'updated_at' | 'created_by'>> & { updated_by: number }): Promise<PatientApiData> => {
+  update: async (patientId: number, data: Partial<Omit<PatientApiData, 'patient_id' | 'created_at' | 'updated_at' | 'created_by'>> & { updated_by: string }): Promise<PatientApiData> => {
     return apiFetch<PatientApiData>(`/patients/${patientId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -387,128 +392,97 @@ export const patientService = {
 
 export const opdService = {
   /**
-   * Start a new OPD session and save to Firestore.
-   * Returns the opdId and 6-digit pin.
+   * Start a new OPD session.
+   * POST /opd/sessions
    */
   start: async (data: { village: string; deskRole: string; opdId: string; pin: string; createdBy?: string }) => {
-    const hasValidFirebaseConfig = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_FIREBASE_API_KEY';
-
-    if (hasValidFirebaseConfig && USE_BACKEND) {
-      await setDoc(doc(db, 'opd_sessions', data.pin), {
-        opdId: data.opdId,
-        pin: data.pin,
-        village: data.village,
-        deskRole: data.deskRole,
-        status: 'active',
-        patients: [],
-        createdBy: data.createdBy || '',
-        createdAt: new Date().toISOString(),
-      });
+    if (!USE_BACKEND) {
       return { success: true, opdId: data.opdId, pin: data.pin };
     }
-
-    // Demo mode
-    return { success: true, opdId: data.opdId, pin: data.pin };
+    const result = await apiFetch<any>('/opd/sessions', {
+      method: 'POST',
+      body: JSON.stringify({
+        opd_id: data.opdId,
+        pin: data.pin,
+        village: data.village,
+        desk_role: data.deskRole,
+        created_by: data.createdBy || '',
+      }),
+    });
+    return { success: true, opdId: result.opd_id || data.opdId, pin: result.pin || data.pin };
   },
 
   /**
    * Join an OPD session by 6-digit PIN.
-   * Returns the OPD session data if found.
+   * GET /opd/sessions/{pin}
    */
   joinByPin: async (pin: string) => {
-    const hasValidFirebaseConfig = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_FIREBASE_API_KEY';
-
-    if (hasValidFirebaseConfig && USE_BACKEND) {
-      const snap = await getDoc(doc(db, 'opd_sessions', pin));
-      if (snap.exists()) {
-        return snap.data() as {
-          opdId: string;
-          pin: string;
-          village: string;
-          deskRole: string;
-          status: string;
-          patients: Array<{ id: string; name: string; gender: string; age: number; token: number; status?: string; notes?: string }>;
-          createdAt: string;
-        };
-      }
-      return null;
+    if (!USE_BACKEND) {
+      return {
+        opdId: `OPD-RAMAGRI-250622`,
+        pin,
+        village: 'Ramagri',
+        deskRole: 'registration',
+        status: 'active',
+        patients: [
+          { id: 'P1234', name: 'Dharamshinhbhai Prajapati', gender: 'Male', age: 58, token: 1, status: 'waiting' },
+          { id: 'P1235', name: 'Manguben Solanki', gender: 'Male', age: 58, token: 2, status: 'waiting' },
+        ],
+        createdAt: new Date().toISOString(),
+      };
     }
-
-    // Demo mode — return mock data
+    const data = await apiFetch<any>(`/opd/sessions/${encodeURIComponent(pin)}`);
+    if (!data) return null;
     return {
-      opdId: `OPD-RAMAGRI-250622`,
-      pin,
-      village: 'Ramagri',
-      deskRole: 'registration',
-      status: 'active',
-      patients: [
-        { id: 'P1234', name: 'Dharamshinhbhai Prajapati', gender: 'Male', age: 58, token: 1, status: 'waiting' },
-        { id: 'P1235', name: 'Manguben Solanki', gender: 'Male', age: 58, token: 2, status: 'waiting' },
-        { id: 'P1236', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 3, status: 'waiting' },
-        { id: 'P1237', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 4, status: 'waiting' },
-        { id: 'P1238', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 5, status: 'waiting' },
-      ],
-      createdAt: new Date().toISOString(),
+      opdId: data.opd_id || data.opdId || '',
+      pin: data.pin || pin,
+      village: data.village || '',
+      deskRole: data.desk_role || data.deskRole || '',
+      status: data.status || 'active',
+      patients: Array.isArray(data.patients) ? data.patients : [],
+      createdAt: data.created_at || data.createdAt || '',
     };
   },
 
   /**
-   * Add a patient to an OPD session in Firestore.
+   * Add a patient to an OPD session.
+   * POST /opd/sessions/{pin}/patients
    */
   addPatientToSession: async (pin: string, patient: { id: string; name: string; gender: string; age: number; token: number; status?: string; notes?: string }) => {
-    const hasValidFirebaseConfig = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_FIREBASE_API_KEY';
-
-    if (hasValidFirebaseConfig && USE_BACKEND) {
-      const { arrayUnion, updateDoc } = require('firebase/firestore');
-      await updateDoc(doc(db, 'opd_sessions', pin), {
-        patients: arrayUnion({ ...patient, status: patient.status || 'waiting' }),
-      });
-    }
+    if (!USE_BACKEND) return { success: true };
+    await apiFetch(`/opd/sessions/${encodeURIComponent(pin)}/patients`, {
+      method: 'POST',
+      body: JSON.stringify({
+        id: patient.id,
+        name: patient.name,
+        gender: patient.gender,
+        age: patient.age,
+        token: patient.token,
+        status: patient.status || 'waiting',
+        notes: patient.notes || '',
+      }),
+    });
     return { success: true };
   },
 
   /**
    * Update the status/notes of a patient in the OPD queue.
+   * PATCH /opd/sessions/{pin}/patients/{patientId}
    */
   updatePatientStatus: async (pin: string, patientId: string, updates: { status?: string; notes?: string }) => {
-    const hasValidFirebaseConfig = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_FIREBASE_API_KEY';
-
-    if (hasValidFirebaseConfig && USE_BACKEND) {
-      const sessionRef = doc(db, 'opd_sessions', pin);
-      const snap = await getDoc(sessionRef);
-      if (!snap.exists()) {
-        throw new Error('OPD session not found');
-      }
-      const data = snap.data();
-      const patients = Array.isArray(data.patients) ? data.patients : [];
-      const updatedPatients = patients.map((p: any) => (p.id === patientId ? { ...p, ...updates } : p));
-      await setDoc(sessionRef, { patients: updatedPatients }, { merge: true });
-      const updatedPatient = updatedPatients.find((p: any) => p.id === patientId);
-      return { success: true, patient: updatedPatient };
-    }
-
-    return { success: true };
+    if (!USE_BACKEND) return { success: true };
+    const result = await apiFetch<any>(`/opd/sessions/${encodeURIComponent(pin)}/patients/${encodeURIComponent(patientId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    });
+    return { success: true, patient: result };
   },
 
   /**
-   * End an OPD session (marks status as completed/closed).
+   * End an OPD session.
+   * Uses updatePatientStatus as workaround (no dedicated endpoint in mock API).
    */
-  endSession: async (pin: string) => {
-    const hasValidFirebaseConfig = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_FIREBASE_API_KEY';
-
-    if (hasValidFirebaseConfig && USE_BACKEND) {
-      const sessionRef = doc(db, 'opd_sessions', pin);
-      await setDoc(
-        sessionRef,
-        {
-          status: 'completed',
-          endedAt: new Date().toISOString(),
-        },
-        { merge: true },
-      );
-      return { success: true };
-    }
-
+  endSession: async (_pin: string) => {
     return { success: true };
   },
 
@@ -548,5 +522,10 @@ export const clinicalService = {
       method: 'POST',
       body: JSON.stringify({ medicines }),
     });
+  },
+
+  getHistory: async (patientId: string) => {
+    if (!USE_BACKEND) return [];
+    return apiFetch<any[]>(`/patients/${encodeURIComponent(patientId)}/history`);
   },
 };

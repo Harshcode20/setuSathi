@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput } from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Modal, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import BottomNav from '../components/BottomNav';
 import { usePatientStore } from '../lib/PatientStore';
 import { usePreferences } from '../lib/PreferencesContext';
+import { clinicalService } from '../lib/api';
 
 const avatarColors = [
   { bg: 'rgba(37,99,235,0.15)', text: '#2563EB' },
@@ -14,10 +16,35 @@ const avatarColors = [
 ];
 
 const PatientRecord = () => {
-  const { patients: allPatients, searchPatients } = usePatientStore();
+  const { patients: allPatients, searchPatients, refreshPatients, loading } = usePatientStore();
   const { t, colors } = usePreferences();
+
+  // Refresh patients from API every time this screen gains focus
+  useFocusEffect(
+    useCallback(() => {
+      refreshPatients();
+    }, [refreshPatients])
+  );
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState<typeof allPatients>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyData, setHistoryData] = useState<any[]>([]);
+  const [selectedPatientName, setSelectedPatientName] = useState('');
+
+  const handlePatientPress = async (patient: typeof allPatients[0]) => {
+    setSelectedPatientName(patient.name);
+    setHistoryOpen(true);
+    setHistoryLoading(true);
+    try {
+      const history = await clinicalService.getHistory(patient.id);
+      setHistoryData(Array.isArray(history) ? history : []);
+    } catch {
+      setHistoryData([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (search.trim().length === 0) {
@@ -90,7 +117,7 @@ const PatientRecord = () => {
           {filtered.map((patient, i) => {
             const color = avatarColors[i % avatarColors.length];
             return (
-              <TouchableOpacity key={patient.id} style={styles.listItem} activeOpacity={0.7}>
+              <TouchableOpacity key={patient.id} style={styles.listItem} activeOpacity={0.7} onPress={() => handlePatientPress(patient)}>
                 <View style={[styles.avatar, { backgroundColor: color.bg }]}>
                   <Text style={[styles.avatarText, { color: color.text }]}>{getInitials(patient.name)}</Text>
                 </View>
@@ -112,6 +139,41 @@ const PatientRecord = () => {
           </View>
         )}
       </ScrollView>
+
+      {/* Visit History Modal */}
+      <Modal visible={historyOpen} transparent animationType="slide" onRequestClose={() => setHistoryOpen(false)}>
+        <View style={styles.historyBackdrop}>
+          <View style={[styles.historySheet, { backgroundColor: colors.background }]}>
+            <View style={styles.historyHeaderRow}>
+              <Text style={[styles.historyTitle, { color: colors.text }]}>{selectedPatientName} — {t('Visit History')}</Text>
+              <TouchableOpacity onPress={() => setHistoryOpen(false)}>
+                <Ionicons name="close" size={26} color={colors.mutedText} />
+              </TouchableOpacity>
+            </View>
+            {historyLoading ? (
+              <ActivityIndicator size="large" style={{ marginTop: 40 }} />
+            ) : historyData.length === 0 ? (
+              <View style={{ alignItems: 'center', paddingTop: 40 }}>
+                <Ionicons name="document-text-outline" size={48} color="#D1D5DB" />
+                <Text style={[styles.emptyTitle, { color: colors.mutedText, marginTop: 12 }]}>{t('No history available')}</Text>
+              </View>
+            ) : (
+              <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20 }}>
+                {historyData.map((entry: any, idx: number) => (
+                  <View key={entry.id || idx} style={[styles.historyCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <Text style={[styles.historyDate, { color: colors.text }]}>{entry.date || entry.created_at || ''}</Text>
+                    {entry.diagnosis && <Text style={[styles.historySub, { color: colors.mutedText }]}>Diagnosis: {Array.isArray(entry.diagnosis) ? entry.diagnosis.join(', ') : entry.diagnosis}</Text>}
+                    {entry.medicines && Array.isArray(entry.medicines) && entry.medicines.length > 0 && (
+                      <Text style={[styles.historySub, { color: colors.mutedText }]}>Medicines: {entry.medicines.map((m: any) => m.name || m.id).join(', ')}</Text>
+                    )}
+                    {entry.follow_up && <Text style={[styles.historySub, { color: colors.mutedText }]}>Follow-up: {entry.follow_up}</Text>}
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       <BottomNav />
     </View>
@@ -138,6 +200,13 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: 'center', paddingTop: 48 },
   emptyTitle: { fontSize: 16, fontWeight: '600', color: '#999' },
   emptySub: { fontSize: 13, color: '#999', marginTop: 4 },
+  historyBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  historySheet: { height: '70%', borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden' },
+  historyHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: '#e5e5e5' },
+  historyTitle: { fontSize: 16, fontWeight: '600' },
+  historyCard: { borderWidth: 1, borderRadius: 12, padding: 14, marginBottom: 12 },
+  historyDate: { fontSize: 14, fontWeight: '600', marginBottom: 4 },
+  historySub: { fontSize: 12, marginTop: 2 },
 });
 
 export default PatientRecord;

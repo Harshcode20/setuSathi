@@ -3,15 +3,9 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert 
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { usePreferences } from '../lib/PreferencesContext';
+import { opdService, clinicalService } from '../lib/api';
 
-const mockQueue = [
-  { id: 'P1234', name: 'Dharamshinhbhai Prajapati', gender: 'Male', age: 58, token: 1 },
-  { id: 'P1235', name: 'Manguben Solanki', gender: 'Female', age: 58, token: 2 },
-  { id: 'P1236', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 3 },
-  { id: 'P1237', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 4 },
-  { id: 'P1238', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 5 },
-  { id: 'P1239', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 6 },
-];
+type QueuePatient = { id: string; name: string; gender: string; age: number; token: number; status?: string };
 
 const mockComplaints = ['1.1 શરીરનો દુઃખાવો', '2.1 તાવ', '3.1 ખંજવાળ', '4.1 ચક્કર'];
 const mockVitals = { temp: '98.2', pulse: '86', bpUpper: '140', bpLower: '120', spo2: '99', bloodSugar: '120' };
@@ -32,15 +26,16 @@ const MedicineCounter = () => {
 
   const [view, setView] = useState<ViewState>('pin');
   const [pin, setPin] = useState(['', '', '', '', '', '']);
+  const [queue, setQueue] = useState<QueuePatient[]>([]);
+  const [opdId, setOpdId] = useState('');
   const [givenDone, setGivenDone] = useState<number[]>([]);
-  const [activePatient, setActivePatient] = useState<typeof mockQueue[0] | null>(null);
+  const [activePatient, setActivePatient] = useState<QueuePatient | null>(null);
 
   const [complaintsOpen, setComplaintsOpen] = useState(true);
   const [vitalsOpen, setVitalsOpen] = useState(false);
   const [checkedMeds, setCheckedMeds] = useState<Set<string>>(new Set());
 
-  const opdId = 'OPD-RAMAGRI-250622';
-  const totalCases = mockQueue.length;
+  const totalCases = queue.length;
   const completed = givenDone.length;
   const inQueue = totalCases - completed;
   const pinString = pin.join('');
@@ -53,9 +48,23 @@ const MedicineCounter = () => {
     if (val && index < 5) pinRefs.current[index + 1]?.focus();
   };
 
-  const handleJoinOPD = () => { if (pinString.length === 6) setView('queue'); };
+  const handleJoinOPD = async () => {
+    if (pinString.length !== 6) return;
+    try {
+      const session = await opdService.joinByPin(pinString);
+      if (session) {
+        setQueue(session.patients || []);
+        setOpdId(session.opdId || '');
+        setView('queue');
+      } else {
+        Alert.alert(t('Error'), t('OPD session not found'));
+      }
+    } catch (err: any) {
+      Alert.alert(t('Error'), err.message || t('Failed to join OPD'));
+    }
+  };
 
-  const handleSelectPatient = (patient: typeof mockQueue[0]) => {
+  const handleSelectPatient = (patient: QueuePatient) => {
     setActivePatient(patient);
     setComplaintsOpen(true); setVitalsOpen(false);
     setCheckedMeds(new Set());
@@ -66,12 +75,18 @@ const MedicineCounter = () => {
     setCheckedMeds((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   };
 
-  const handleMarkDone = () => {
+  const handleMarkDone = async () => {
     if (activePatient) {
-      setGivenDone((prev) => [...prev, activePatient.token]);
-      Alert.alert(t('Medicines Given'), `${activePatient.name} ${t('medicines dispensed successfully.')}`);
-      setActivePatient(null);
-      setView('queue');
+      try {
+        const medsToDispense = mockMedicines.filter((m) => checkedMeds.has(m.id));
+        await clinicalService.dispenseMedicine(activePatient.id, medsToDispense);
+        setGivenDone((prev) => [...prev, activePatient.token]);
+        Alert.alert(t('Medicines Given'), `${activePatient.name} ${t('medicines dispensed successfully.')}`);
+        setActivePatient(null);
+        setView('queue');
+      } catch (err: any) {
+        Alert.alert(t('Error'), err.message || t('Failed to dispense medicines'));
+      }
     }
   };
 
@@ -253,7 +268,7 @@ const MedicineCounter = () => {
 
       <ScrollView style={{ flex: 1, paddingHorizontal: 20, paddingTop: 16 }}>
         <View style={[s.queueList, { backgroundColor: colors.surface }]}> 
-          {mockQueue.map((p) => {
+          {queue.map((p) => {
             const done = givenDone.includes(p.token);
             return (
               <TouchableOpacity key={p.token} style={[s.queueItem, { borderBottomColor: colors.border }, done && { opacity: 0.5 }]} onPress={() => !done && handleSelectPatient(p)} disabled={done}>

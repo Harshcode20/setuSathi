@@ -24,7 +24,7 @@ export const FORCE_LOGIN_ON_APP_START = true;
 
 // ─── API Server ──────────────────────────────────────
 // Base URL for your REST / GraphQL backend
-export const API_BASE_URL = 'http://localhost:8000';
+export const API_BASE_URL = 'https://setuapi-sooty.vercel.app/mock';
 export const API_TIMEOUT = 15000; // ms
 
 // ─── API Keys ────────────────────────────────────────

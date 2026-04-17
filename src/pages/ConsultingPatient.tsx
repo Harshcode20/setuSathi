@@ -3,10 +3,12 @@ import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView,
   Modal,
   TextInput,
+  Alert,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { usePreferences } from '../lib/PreferencesContext';
+import { clinicalService } from '../lib/api';
 
 // ─── Data ────────────────────────────────────────────
 
@@ -246,9 +248,43 @@ const ConsultingPatient = () => {
     });
   };
 
-  const handleMarkAsDone = () => {
+  const handleMarkAsDone = async () => {
     const tokenNum = patientData.token || 1;
-    (navigation as any).navigate('DoctorOPDSession', { completedToken: tokenNum });
+    try {
+      const diagnosisList = Array.from(selectedDiseases).map((id) => {
+        const d = diseases.find((x) => x.id === id);
+        return d ? `${d.id} ${d.label}` : id;
+      });
+      if (otherDiagnosis.trim()) diagnosisList.push(otherDiagnosis.trim());
+
+      const labTestList = Array.from(selectedLabTests).map((id) => {
+        const lt = labTests.find((x) => x.id === id);
+        return lt ? `${lt.id} ${lt.label}` : id;
+      });
+      if (otherLabTest.trim()) labTestList.push(otherLabTest.trim());
+
+      await clinicalService.recordConsult(patientData.id, {
+        diagnosis: diagnosisList,
+        lab_tests: labTestList,
+        follow_up: followUp,
+        doctor_notes: '',
+      });
+
+      if (selectedMedicines.size > 0) {
+        const medsArray = Array.from(selectedMedicines.values()).map((m) => ({
+          id: m.id,
+          name: m.label,
+          dosage: m.dosage,
+          days: String(m.days),
+          timing: m.timing,
+        }));
+        await clinicalService.dispenseMedicine(patientData.id, medsArray);
+      }
+
+      (navigation as any).navigate('DoctorOPDSession', { completedToken: tokenNum });
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to submit consultation');
+    }
   };
 
   const renderHistoryChips = (items: string[] | undefined) => {

@@ -173,9 +173,9 @@ export const PatientProvider = ({ children }: { children: React.ReactNode }) => 
         mobile_number?: string;
         address?: string;
         photo_url?: string;
-        updated_by: number;
+        updated_by: string;
       } = {
-        updated_by: 1,
+        updated_by: '1',
       };
 
       if (typeof updates.name === 'string') payload.full_name = updates.name;

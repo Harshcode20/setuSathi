@@ -1,0 +1,707 @@
+{
+  "info": {
+    "name": "SETU Mock API - Complete Collection",
+    "description": "Complete mock API collection for SETU application. Deployed on Vercel at https://setuapi-sooty.vercel.app/mock",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "1. AUTH & USER PROFILE",
+      "description": "Authentication and user profile management endpoints",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.environment.set('access_token', jsonData.access_token);",
+                  "    pm.environment.set('user_id', jsonData.user.id);",
+                  "    pm.test('Login successful', function () {",
+                  "        pm.expect(jsonData.success).to.equal(true);",
+                  "        pm.expect(jsonData.access_token).to.be.a('string');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"doctor@setu.test\",\n  \"password\": \"secret123\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/auth/login",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Register Doctor/Volunteer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Dr. Rajesh Kumar\",\n  \"member_id\": \"D0025\",\n  \"email\": \"rajesh@setu.test\",\n  \"mobile\": \"9999888877\",\n  \"password\": \"secure123\",\n  \"role\": \"doctor\",\n  \"photo_url\": \"https://example.com/photo.jpg\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/auth/register",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"doctor@setu.test\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/auth/forgot-password",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "auth",
+                "forgot-password"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Current User Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/users/me",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "users",
+                "me"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update User Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mobile\": \"9999999999\",\n  \"photo_url\": \"https://example.com/new-photo.jpg\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/users/me",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "users",
+                "me"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. PATIENT APIs",
+      "description": "Patient management - Create, Read, Update, Delete, Search",
+      "item": [
+        {
+          "name": "Create Patient",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.environment.set('patient_id', jsonData.patient_id);",
+                  "    pm.test('Patient created successfully', function () {",
+                  "        pm.expect(jsonData.patient_id).to.be.a('number');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Rajesh Singh\",\n  \"gender\": \"Male\",\n  \"date_of_birth\": \"1988-03-20\",\n  \"age\": 35,\n  \"mobile_number\": \"+919876543201\",\n  \"address\": \"456 Park Lane, Mumbai\",\n  \"photo_url\": \"https://example.com/patient.jpg\",\n  \"created_by\": 1,\n  \"updated_by\": 1\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/patients",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "patients"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get All Patients",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/patients?skip=0&limit=10",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "patients"
+              ],
+              "query": [
+                {
+                  "key": "skip",
+                  "value": "0"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Patient by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/patients/1",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "patients",
+                "1"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Patient",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"John Smith\",\n  \"mobile_number\": \"+1111111111\",\n  \"age\": 34,\n  \"updated_by\": 2\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/patients/1",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "patients",
+                "1"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Patient",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/patients/1",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "patients",
+                "1"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Search Patients",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/patients/search/John?skip=0&limit=10",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "patients",
+                "search",
+                "John"
+              ],
+              "query": [
+                {
+                  "key": "skip",
+                  "value": "0"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. OPD SESSION APIs",
+      "description": "OPD session management - Start session, join by PIN, manage queue",
+      "item": [
+        {
+          "name": "Start OPD Session",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.environment.set('opd_pin', jsonData.pin);",
+                  "    pm.test('OPD session created', function () {",
+                  "        pm.expect(jsonData.success).to.equal(true);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"opd_id\": \"OPD-RAMAGRI-250326\",\n  \"pin\": \"123456\",\n  \"village\": \"Ramagri\",\n  \"desk_role\": \"registration\",\n  \"created_by\": \"u_124\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/opd/sessions",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "opd",
+                "sessions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Join OPD by PIN",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/opd/sessions/123456",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "opd",
+                "sessions",
+                "123456"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Add Patient to OPD Queue",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"P1235\",\n  \"name\": \"Priya Sharma\",\n  \"gender\": \"Female\",\n  \"age\": 45,\n  \"token\": 2\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/opd/sessions/123456/patients",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "opd",
+                "sessions",
+                "123456",
+                "patients"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get OPD Statistics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/opd/stats",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "opd",
+                "stats"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update OPD Patient Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"consulted\",\n  \"notes\": \"Complete blood test required\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/opd/sessions/123456/patients/P1234",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "opd",
+                "sessions",
+                "123456",
+                "patients",
+                "P1234"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. CLINICAL APIs",
+      "description": "Clinical data - Vitals, Consultation, Medicines, History",
+      "item": [
+        {
+          "name": "Record Vitals",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.test('Vitals recorded', function () {",
+                  "        pm.expect(jsonData.success).to.equal(true);",
+                  "        pm.expect(jsonData.vitals_id).to.be.a('number');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"temp\": \"98.6\",\n  \"pulse\": \"88\",\n  \"bp\": \"130/85\",\n  \"spo2\": \"98\",\n  \"blood_sugar\": \"110\",\n  \"allergies\": \"Pollen allergy\",\n  \"notes\": \"Patient has mild fever\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/patients/1/vitals",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "patients",
+                "1",
+                "vitals"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Record Consultation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.test('Consultation recorded', function () {",
+                  "        pm.expect(jsonData.success).to.equal(true);",
+                  "        pm.expect(jsonData.consult_id).to.be.a('number');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"diagnosis\": [\"Hypertension\", \"Diabetes Type 2\"],\n  \"lab_tests\": [\"CBC\", \"FBS\", \"Cholesterol\"],\n  \"follow_up\": \"After 2 weeks\",\n  \"doctor_notes\": \"Monitor BP regularly, reduce salt intake\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/patients/1/consult",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "patients",
+                "1",
+                "consult"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Dispense Medicines",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.test('Medicines dispensed', function () {",
+                  "        pm.expect(jsonData.success).to.equal(true);",
+                  "        pm.expect(jsonData.dispense_id).to.be.a('number');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"medicines\": [\n    {\n      \"id\": \"6.2\",\n      \"name\": \"Aspirin\",\n      \"dosage\": \"1-0-1\",\n      \"days\": 7,\n      \"timing\": \"After Meal\"\n    },\n    {\n      \"id\": \"8.5\",\n      \"name\": \"Metformin\",\n      \"dosage\": \"0-1-1\",\n      \"days\": 30,\n      \"timing\": \"Before Meal\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/patients/1/medicines",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "patients",
+                "1",
+                "medicines"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Patient History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/patients/1/history",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "patients",
+                "1",
+                "history"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. HEALTH & SYSTEM",
+      "description": "Health checks and system monitoring",
+      "item": [
+        {
+          "name": "Mock API Health Check",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/health",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "https://setuapi-sooty.vercel.app/mock",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "patient_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "opd_pin",
+      "value": "123456",
+      "type": "string"
+    }
+  ]
+}

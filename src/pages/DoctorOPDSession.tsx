@@ -2,9 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, FlatList, Animated } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { FIREBASE_CONFIG, USE_BACKEND } from '../lib/config';
+import { opdService } from '../lib/api';
 import { usePreferences } from '../lib/PreferencesContext';
 
 type Patient = {
@@ -32,20 +30,33 @@ const DoctorOPDSession = () => {
   const opdId = session?.opdId || 'OPD-UNKNOWN';
   const sessionPin = session?.pin || '';
 
-  // Live patient list — starts with what was passed, then updated by Firestore listener
+  // Live patient list — starts with what was passed, then updated by polling
   const [patients, setPatients] = useState<Patient[]>(session?.patients || []);
 
   useEffect(() => {
-    const hasValidFirebaseConfig = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_FIREBASE_API_KEY';
-    if (!hasValidFirebaseConfig || !USE_BACKEND || !sessionPin) return;
+    if (!sessionPin) return;
 
-    const unsubscribe = onSnapshot(doc(db, 'opd_sessions', sessionPin), (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        setPatients(data.patients || []);
+    let active = true;
+
+    const poll = async () => {
+      try {
+        const data = await opdService.joinByPin(sessionPin);
+        if (active && data) {
+          setPatients(data.patients || []);
+        }
+      } catch (err) {
+        // silently ignore polling errors
       }
-    });
-    return () => unsubscribe();
+    };
+
+    // Initial fetch
+    poll();
+    const interval = setInterval(poll, 8000);
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
   }, [sessionPin]);
 
   const [consultDone, setConsultDone] = useState(0);

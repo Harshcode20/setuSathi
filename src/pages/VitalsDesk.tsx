@@ -3,15 +3,9 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert 
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { usePreferences } from '../lib/PreferencesContext';
+import { opdService, clinicalService } from '../lib/api';
 
-const mockQueue = [
-  { id: 'P1234', name: 'Dharamshinhbhai Prajapati', gender: 'Male', age: 58, token: 1 },
-  { id: 'P1235', name: 'Manguben Solanki', gender: 'Female', age: 58, token: 2 },
-  { id: 'P1236', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 3 },
-  { id: 'P1237', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 4 },
-  { id: 'P1238', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 5 },
-  { id: 'P1239', name: 'Ramilaben Thakor', gender: 'Female', age: 58, token: 6 },
-];
+type QueuePatient = { id: string; name: string; gender: string; age: number; token: number; status?: string };
 
 type ViewState = 'pin' | 'queue' | 'record';
 
@@ -22,8 +16,10 @@ const VitalsDesk = () => {
 
   const [view, setView] = useState<ViewState>('pin');
   const [pin, setPin] = useState(['', '', '', '', '', '']);
+  const [queue, setQueue] = useState<QueuePatient[]>([]);
+  const [opdId, setOpdId] = useState('');
   const [vitalsDone, setVitalsDone] = useState<number[]>([]);
-  const [activePatient, setActivePatient] = useState<typeof mockQueue[0] | null>(null);
+  const [activePatient, setActivePatient] = useState<QueuePatient | null>(null);
   const [complaintsOpen, setComplaintsOpen] = useState(false);
 
   // Vitals form
@@ -38,8 +34,7 @@ const VitalsDesk = () => {
   const [allergies, setAllergies] = useState('');
   const [notes, setNotes] = useState('');
 
-  const opdId = 'OPD-RAMAGRI-250622';
-  const totalCases = mockQueue.length;
+  const totalCases = queue.length;
   const vitalsCompleted = vitalsDone.length;
   const inQueue = totalCases - vitalsCompleted;
 
@@ -55,11 +50,23 @@ const VitalsDesk = () => {
     }
   };
 
-  const handleJoinOPD = () => {
-    if (pinString.length === 6) setView('queue');
+  const handleJoinOPD = async () => {
+    if (pinString.length !== 6) return;
+    try {
+      const session = await opdService.joinByPin(pinString);
+      if (session) {
+        setQueue(session.patients || []);
+        setOpdId(session.opdId || '');
+        setView('queue');
+      } else {
+        Alert.alert(t('Error'), t('OPD session not found'));
+      }
+    } catch (err: any) {
+      Alert.alert(t('Error'), err.message || t('Failed to join OPD'));
+    }
   };
 
-  const handleSelectPatient = (patient: typeof mockQueue[0]) => {
+  const handleSelectPatient = (patient: QueuePatient) => {
     setActivePatient(patient);
     setBodyTemp(''); setPulse(''); setBpUpper(''); setBpLower('');
     setSpo2(''); setBloodSugar(''); setHeight(''); setWeight('');
@@ -68,12 +75,27 @@ const VitalsDesk = () => {
     setView('record');
   };
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
     if (activePatient) {
-      setVitalsDone((prev) => [...prev, activePatient.token]);
-      Alert.alert(t('Vitals Recorded'), `${activePatient.name} ${t('vitals completed successfully.')}`);
-      setActivePatient(null);
-      setView('queue');
+      try {
+        await clinicalService.recordVitals(activePatient.id, {
+          temp: bodyTemp || undefined,
+          pulse: pulse || undefined,
+          bp: (bpUpper && bpLower) ? `${bpUpper}/${bpLower}` : undefined,
+          spo2: spo2 || undefined,
+          blood_sugar: bloodSugar || undefined,
+          height: height || undefined,
+          weight: weight || undefined,
+          allergies: allergies || undefined,
+          notes: notes || undefined,
+        });
+        setVitalsDone((prev) => [...prev, activePatient.token]);
+        Alert.alert(t('Vitals Recorded'), `${activePatient.name} ${t('vitals completed successfully.')}`);
+        setActivePatient(null);
+        setView('queue');
+      } catch (err: any) {
+        Alert.alert(t('Error'), err.message || t('Failed to record vitals'));
+      }
     }
   };
 
@@ -298,7 +320,7 @@ const VitalsDesk = () => {
 
       <ScrollView style={{ flex: 1, paddingHorizontal: 20, paddingTop: 16 }}>
         <View style={styles.queueList}>
-          {mockQueue.map((p) => {
+          {queue.map((p) => {
             const done = vitalsDone.includes(p.token);
             return (
               <TouchableOpacity
