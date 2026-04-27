@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Image, Alert, Platform, TextInput, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -23,7 +23,32 @@ const DoctorDashboard = () => {
 
   const [pin, setPin] = useState(['', '', '', '', '', '']);
   const [joining, setJoining] = useState(false);
+  const [opdStats, setOpdStats] = useState({
+    totalPatients: 42,
+    consultsDone: 18,
+  });
+  const [loadingStats, setLoadingStats] = useState(true);
   const pinRefs = useRef<Array<TextInput | null>>([]);
+
+  // Fetch OPD statistics on component mount
+  useEffect(() => {
+    const fetchOpdStats = async () => {
+      try {
+        setLoadingStats(true);
+        const stats = await opdService.getStats();
+        setOpdStats({
+          totalPatients: userProfile?.stats?.patients ?? 42,
+          consultsDone: (stats as any)?.consultsDone ?? 18,
+        });
+      } catch (error) {
+        console.warn('Failed to fetch OPD stats:', error);
+        // Keep default values on error
+      } finally {
+        setLoadingStats(false);
+      }
+    };
+    fetchOpdStats();
+  }, [userProfile?.stats?.patients]);
 
   const handlePinChange = (text: string, index: number) => {
     const val = text.replace(/\D/g, '');
@@ -80,11 +105,6 @@ const DoctorDashboard = () => {
         onPress: () => authService.logout(),
       },
     ]);
-  };
-
-  const opdStats = {
-    totalPatients: userProfile?.stats?.patients ?? 42,
-    consultsDone: userProfile?.stats?.consults ?? 18,
   };
 
   return (
